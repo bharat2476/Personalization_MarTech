@@ -34,8 +34,10 @@ from metrics import (
     compute_small_seller_share
 )
 from personascale_ui import (
+    _variant_label,
     inject_enterprise_css,
     render_brand_header,
+    render_command_control_bar,
     render_engine_telemetry,
     render_kpi_shelf,
     render_product_grid,
@@ -63,13 +65,9 @@ with st.sidebar:
     st.markdown("### PersonaScale AI")
     st.caption("Orchestration control plane")
     st.subheader("Experiment Controls")
-    st.radio(
-        "Recommendation Variant",
-        [REC_VARIANT_BEHAVIORAL, REC_VARIANT_HYBRID],
-        index=1,
-        key="rec_variant",
-        help="Variant A ranks from session behavior; Variant B blends 0-party and behavioral signals.",
-    )
+    active_variant = st.session_state.get("rec_variant", REC_VARIANT_HYBRID)
+    st.markdown(f"**Active variant:** {_variant_label(active_variant)}")
+    st.caption("Change variant in the command bar below the KPI metrics (main panel).")
     st.caption("Ranking updates instantly when you view or click products in Recommendations.")
     with st.expander("MarTech Backend: Propensity Logs"):
         propensity_logs = st.session_state.get("propensity_logs", [])
@@ -80,6 +78,7 @@ with st.sidebar:
 
 render_brand_header()
 render_kpi_shelf(st.session_state)
+render_command_control_bar()
 
 # ---------------------------------------------------------
 # INITIALIZE DATA ON FIRST LOAD

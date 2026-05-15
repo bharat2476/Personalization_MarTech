@@ -47,19 +47,34 @@ def inject_enterprise_css() -> None:
             background: linear-gradient(180deg, #0F172A 0%, #1E293B 100%);
             border-right: 1px solid #1E293B;
           }
-          [data-testid="stSidebar"] * {
-            color: var(--ps-sidebar-text) !important;
-          }
-          [data-testid="stSidebar"] .stRadio label,
-          [data-testid="stSidebar"] .stCaption,
+          [data-testid="stSidebar"] h1,
+          [data-testid="stSidebar"] h2,
+          [data-testid="stSidebar"] h3,
           [data-testid="stSidebar"] p,
+          [data-testid="stSidebar"] label,
           [data-testid="stSidebar"] span,
-          [data-testid="stSidebar"] label {
+          [data-testid="stSidebar"] .stCaption {
             color: var(--ps-sidebar-text) !important;
           }
-          [data-testid="stSidebar"] [data-baseweb="radio"] div {
-            background-color: #1E293B;
-            border-color: #334155;
+          [data-testid="stSidebar"] [data-baseweb="radio"],
+          [data-testid="stSidebar"] [data-baseweb="select"],
+          [data-testid="stSidebar"] input,
+          [data-testid="stSidebar"] button {
+            pointer-events: auto !important;
+          }
+          [data-testid="stSidebar"] [role="radiogroup"] label {
+            cursor: pointer !important;
+            color: var(--ps-sidebar-text) !important;
+          }
+          [data-testid="stSidebar"] [data-baseweb="radio"] > div {
+            background-color: transparent !important;
+          }
+          .ps-control-bar label {
+            color: var(--ps-muted) !important;
+            font-size: 0.78rem !important;
+            font-weight: 600 !important;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
           }
           .block-container {
             padding-top: 1.25rem;
@@ -241,6 +256,48 @@ def compute_command_center_kpis(session_state) -> dict[str, str]:
         "intent_triggers": f"{intent_triggers:,}",
         "churn_rate": churn_rate,
     }
+
+
+def _variant_label(value: str) -> str:
+    if "Behavioral" in value and "Hybrid" not in value:
+        return "Variant A — Behavioral Only"
+    return "Variant B — Hybrid Model"
+
+
+def render_variant_control() -> str:
+    """Single variant picker (selectbox avoids sidebar radio CSS issues)."""
+    from martech_engine import REC_VARIANT_BEHAVIORAL, REC_VARIANT_HYBRID
+
+    options = [REC_VARIANT_BEHAVIORAL, REC_VARIANT_HYBRID]
+    if "rec_variant" not in st.session_state or st.session_state["rec_variant"] not in options:
+        st.session_state["rec_variant"] = REC_VARIANT_HYBRID
+
+    return st.selectbox(
+        "Recommendation Variant",
+        options=options,
+        format_func=_variant_label,
+        key="rec_variant",
+        help="Variant A uses session behavior; Variant B blends 0-party ranking with behavioral signals.",
+    )
+
+
+def render_command_control_bar() -> None:
+    bar = st.columns([2.4, 2.2, 2.2, 5.2])
+    with bar[0]:
+        render_variant_control()
+    with bar[1]:
+        st.caption("Engine mode")
+        st.write(_variant_label(st.session_state.get("rec_variant", "")))
+    with bar[2]:
+        interactions = st.session_state.get("interactions", {})
+        st.caption("Session signals")
+        st.write(
+            f"{sum(interactions.get('views', {}).values())} views · "
+            f"{sum(interactions.get('clicks', {}).values())} clicks"
+        )
+    with bar[3]:
+        st.caption("Orchestration")
+        st.write("Select variant here — works when the sidebar is collapsed on mobile.")
 
 
 def render_kpi_shelf(session_state) -> None:
