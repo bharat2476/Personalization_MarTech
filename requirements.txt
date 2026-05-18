@@ -1,1 +1,4 @@
-streamlit
+# Streamlit simulator (Python 3.10–3.14)
+streamlit>=1.32.0
+pandas>=2.0.0
+numpy>=1.26.0

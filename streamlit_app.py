@@ -42,6 +42,7 @@ from personascale_ui import (
     render_kpi_shelf,
     render_product_grid,
 )
+from genai_agent_studio import render_genai_agent_studio_tab
 
 st.set_page_config(
     page_title="PersonaScale AI | Real-Time Orchestration",
@@ -96,14 +97,15 @@ if "users" not in st.session_state:
 # TABS
 # ---------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs([
+tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Member & Strategy",
     "Recommendations",
     "Marketing & Ads",
     "Portfolio Metrics",
     "A/B Testing Lab",
     "Trust & Safety",
-    "Architecture Diagram"
+    "Architecture Diagram",
+    "GenAI Agent Studio",
 ])
 
 # ---------------------------------------------------------
@@ -702,6 +704,9 @@ with tab7:
         st.image(str(diagram_path), caption="PersonaScale AI architecture workflow", use_container_width=True)
     else:
         st.warning("Architecture diagram file not found. Expected: architecture diagram.png")
+
+with tab8:
+    render_genai_agent_studio_tab(st.session_state)
 
 st.divider()
 render_engine_telemetry(st.session_state)

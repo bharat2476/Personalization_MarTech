@@ -9,6 +9,11 @@ suppressed or reactivated.
 Core UI logic lives in `streamlit_app.py`. MarTech signal processing, hybrid ranking,
 and propensity-gated notifications are encapsulated in `martech_engine.py`.
 
+**Agentic RAG (new):** A production-style CDP on **Supabase + pgvector** (`cdp_pipeline.py`),
+an autonomous campaign agent (`martech_agent.py`), and **Tab 8: GenAI Agent Studio**
+(`genai_agent_studio.py`) demonstrate natural-language orchestration over golden records,
+guardrails, vector retrieval, and notification queueing.
+
 ## Demo scope
 
 - 500 generated products across sport categories, audiences, and product
@@ -38,19 +43,35 @@ and propensity-gated notifications are encapsulated in `martech_engine.py`.
 - **Hybrid recommendations**: sidebar A/B variant (behavioral-only vs. 0-party + behavioral blend) with instant re-ranking on View/Click.
 - **Live product grid** with per-card “Why am I seeing this?” captions driven by current member state.
 - **Propensity-scored push notifications**: queue only when score > 0.75; inspect decisions in **MarTech Backend: Propensity Logs** (sidebar).
+- **Supabase CDP**: stitched schema (`consumers`, `products`, `behavioral_logs`) with **HNSW** vector index and `match_products` RPC.
+- **CDP pipeline** (`cdp_pipeline.py`): golden-record stitch, semantic search, agent context compilation.
+- **Autonomous MarTech agent** (`martech_agent.py`): LangGraph ReAct + OpenAI tool-calling over CDP tools.
+- **GenAI Agent Studio (Tab 8)**: chat UI, reasoning telemetry trace, simulated push notification card.
 
 ## Project structure
 
-| File | Purpose |
-|------|---------|
-| `streamlit_app.py` | PersonaScale AI UI, tabs, session state, command-bar variant controls |
+| File / path | Purpose |
+|-------------|---------|
+| `streamlit_app.py` | PersonaScale AI UI, 8 tabs, session state, command-bar variant controls |
 | `personascale_ui.py` | Enterprise CSS, KPI shelf, product cards, engine telemetry |
 | `martech_engine.py` | Medallion layers, hybrid ranking, interaction tracking, propensity scoring |
-| `seed_data.py` | Product registry (SKU catalog) and simulated 1st-party event logs |
+| `genai_agent_studio.py` | Tab 8 — chat, telemetry trace, CDP/simulator orchestration UI |
+| `cdp_pipeline.py` | Supabase CDP: stitch golden record, embed + `match_products`, agent context |
+| `martech_agent.py` | LangGraph agent: profile, guardrails, inventory search, queue notification |
+| `seed_data.py` | In-memory product registry and simulated 1st-party event logs |
 | `ranking.py` | Base 0-party ranking, lifecycle email rules, A/B simulation helpers |
 | `data_generator.py` | Marketplace bootstrap via `initialize_marketplace()` |
 | `auction.py` | Sponsored product auction scoring |
 | `metrics.py` | CTR, conversion, ROAS, and diversity metrics |
+| `supabase/migrations/...sql` | CDP DDL: pgvector, tables, HNSW index, `match_products` RPC |
+| `supabase/seed_demo.sql` | Demo row: `USER_7721`, HydroStream vest, behavioral view events |
+| `scripts/pre-demo.ps1` | Pre-demo health checks + checklist |
+| `scripts/setup-cdp-venv.ps1` | Creates `.venv-cdp` (Python 3.12) for CDP/agent deps |
+| `scripts/backfill_product_embeddings.py` | Writes 384-d embeddings to Supabase `products` |
+| `requirements.txt` | Streamlit app only (Python 3.10–3.14) |
+| `requirements-cdp.txt` | Supabase + sentence-transformers |
+| `requirements-agent.txt` | LangChain + LangGraph + OpenAI |
+| `.env` | `SUPABASE_URL`, `SUPABASE_KEY`, optional `OPENAI_API_KEY` (gitignored) |
 
 ## Production architecture blueprint (scalable infra)
 
@@ -142,26 +163,245 @@ flowchart TB
 
 ## Current app tabs
 
-1. Member & Strategy
-2. Recommendations
-3. Marketing & Ads
-4. Portfolio Metrics
-5. A/B Testing Lab
-6. Trust & Safety
-7. Architecture Diagram
+| Tab | Name | Primary demo value |
+|-----|------|-------------------|
+| 1 | Member & Strategy | Configure member, privacy, sliders; **Run Simulation** (required for Tab 8 fallback) |
+| 2 | Recommendations | Live grid, hybrid ranking, explainability |
+| 3 | Marketing & Ads | Email rules, propensity-gated push |
+| 4 | Portfolio Metrics | Executive metrics (may hit known auction bug) |
+| 5 | A/B Testing Lab | Experiment design readout |
+| 6 | Trust & Safety | Privacy principles and architecture story |
+| 7 | Architecture Diagram | End-to-end workflow image |
+| 8 | **GenAI Agent Studio** | **Agentic RAG** — NL chat, tool telemetry, push alert |
 
 ## Sidebar controls
 
 - **Recommendation Variant** — Variant A (behavioral-only) or Variant B (hybrid: 70% base ranker + 30% session behavioral).
 - **MarTech Backend: Propensity Logs** — expandable log of push propensity evaluations (score, threshold, queued vs. suppressed).
 
-## Quick start (demo flow)
+---
+
+## Agentic RAG, CDP, and autonomous agent
+
+### Architecture (demo stack)
+
+```mermaid
+flowchart LR
+  UI[Tab 8 GenAI Agent Studio]
+  AG[martech_agent.py LangGraph]
+  CDP[cdp_pipeline.py]
+  SB[(Supabase PostgreSQL + pgvector)]
+  UI --> AG
+  AG -->|tools| CDP
+  CDP --> SB
+```
+
+| Layer | Component | Role |
+|-------|-----------|------|
+| Experience | `genai_agent_studio.py` | `st.chat_input`, chat history, telemetry expander, `st.success` push card |
+| Agent | `martech_agent.py` | ReAct loop; tools: `get_customer_profile`, `evaluate_guardrails`, `search_inventory`, `queue_notification` |
+| CDP | `cdp_pipeline.py` | Golden record stitch; MiniLM embeddings; `match_products` RPC |
+| Data | Supabase | `consumers`, `products`, `behavioral_logs`; HNSW on `description_embedding` |
+
+### Demo persona: `USER_7721`
+
+After `seed_demo.sql`:
+
+- **Segment:** High-Value Runner · **Interests:** Marathon Training, Trail Running
+- **Guardrail:** shoe purchase **14 days ago** → `shoe_promotions_suppressed = true`
+- **Behavior:** 3× views on `AeroGlow Shoes` (logged in `behavioral_logs`)
+- **Catalog:** `ACC-004` HydroStream 2L Hydration Vest (vector match target)
+
+### Agent tools (what the LLM calls)
+
+1. **`get_customer_profile(user_id)`** — Bronze/Silver/Gold stitch: profile + last 10 behavioral events.
+2. **`evaluate_guardrails(user_id)`** — Suppression window, frequency cap, consent, `outreach_allowed`.
+3. **`search_inventory(query, user_id)`** — Cosine ANN via `match_products`; auto-excludes **Footwear** when suppressed.
+4. **`queue_notification(user_id, message)`** — Inserts `push_sent` into `behavioral_logs` + local JSON queue under `artifacts/notification_queue/`.
+
+### Strict agent policy (system prompt)
+
+- Always: profile → guardrails → search → (optional) queue.
+- **Must not** promote footwear when shoe suppression is active—even if the user prompt mentions shoe browsing.
+- Pivot to accessories/apparel/hydration via vector search.
+- Queue outreach only when `outreach_allowed` is true.
+
+---
+
+## Before demo — complete checklist
+
+### A. One-time Supabase setup
+
+1. Open your project → **SQL Editor**.
+2. Run **`supabase/migrations/20260518120000_cdp_stitched_schema.sql`** (creates extension, tables, HNSW index, RPCs).
+3. Run **`supabase/seed_demo.sql`** (inserts `USER_7721`, product `ACC-004`, sample behavior).
+4. Backfill embeddings (required for non-empty vector search):
+
+   ```powershell
+   .\.venv-cdp\Scripts\python.exe scripts\backfill_product_embeddings.py
+   ```
+
+   **Expected:** console prints `Embedded: ACC-004` (and any other SKUs without vectors).
+
+### B. Local environment
+
+| Step | Command / action | Expected result |
+|------|------------------|-----------------|
+| Copy secrets | `.env.example` → `.env` | File gitignored |
+| Supabase URL | `SUPABASE_URL=https://<ref>.supabase.co` | Matches dashboard |
+| Supabase key | `SUPABASE_KEY` = anon JWT `eyJ...` preferred | `get_supabase_client()` succeeds; no 401 on queries |
+| OpenAI (optional) | `OPENAI_API_KEY=sk-...` | Only needed for Tab 8 **“Use full LLM agent”** toggle |
+| CDP venv | `.\scripts\setup-cdp-venv.ps1` | `.venv-cdp` with Python 3.12 |
+| Health check | `.\scripts\pre-demo.ps1` | Green OK lines; warnings documented |
+
+### C. Ten minutes before presenting
+
+| Step | Action | Expected result |
+|------|--------|-----------------|
+| 1 | `.\scripts\pre-demo.ps1` | Supabase connected; `USER_7721` golden record OK (or clear migration reminder) |
+| 2 | Start Streamlit | Terminal: `You can now view your Streamlit app` → **http://localhost:8501** |
+| 3 | Tab 1 → **Run Simulation** | Green toast: simulation saved |
+| 4 | Tab 8 → `USER_7721` → send sample prompt | See [Tab 8 expected results](#tab-8-genai-agent-studio--expected-results) |
+
+### Sample Tab 8 prompt
+
+```text
+USER_7721 viewed AeroGlow Shoes 3 times in 10 minutes. Shoe purchase was 14 days ago.
+Check guardrails and build a hydration accessory campaign — no footwear promos.
+```
+
+**Settings:** leave **“Use full LLM agent (OpenAI)”** **OFF** unless billing/quota is active.
+
+---
+
+## How to run locally
+
+### Two Python environments (important)
+
+| Environment | Python | Requirements | Used for |
+|-------------|--------|--------------|----------|
+| **System / default** | 3.10–3.14 | `requirements.txt` | **Streamlit UI** (`streamlit run ...`) |
+| **`.venv-cdp`** | 3.11 or **3.12** | `requirements-cdp.txt` + `requirements-agent.txt` | CDP, embeddings, `martech_agent` CLI |
+
+Streamlit on 3.14 cannot load `sentence-transformers` / full CDP stack; Tab 8 **falls back** to Tab 1 simulator data when CDP is unavailable.
+
+### Start the Streamlit app
+
+```powershell
+cd c:\Users\agarw\adtech-platform\blank-app
+pip install -r requirements.txt
+python -m streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false
+```
+
+Or:
+
+```powershell
+.\scripts\run-streamlit.ps1
+# or
+.\scripts\pre-demo.ps1 -StartStreamlit
+```
+
+Open **http://localhost:8501**. Do **not** use `npm run dev` (separate Node app on port 3001).
+
+### CDP / agent CLI (optional)
+
+```powershell
+.\.venv-cdp\Scripts\Activate.ps1
+python -c "from cdp_pipeline import stitch_golden_record; print(stitch_golden_record('USER_7721'))"
+python martech_agent.py --demo USER_7721 "Viewed AeroGlow Shoes 3x; shoe purchase 14 days ago."
+```
+
+Artifacts: campaign reports in `artifacts/campaign_runs/`; queued pushes in `artifacts/notification_queue/`.
+
+---
+
+## Demo script (5–7 minutes) and expected results
+
+### Tab 1 — Member & Strategy
+
+**Steps:** Choose segment / customer type / gender → set privacy mode and sliders → expand signals JSON → **Run Simulation**.
+
+**Expect:**
+
+- Metrics row: ~500 products, ~100 members.
+- Success message: *“Simulation saved. Open Recommendations, Marketing & Ads…”*
+- `st.session_state["user"]` populated for downstream tabs.
+
+### Tab 2 — Recommendations
+
+**Steps:** Toggle **Recommendation Variant** (below KPIs) → **View** / **Click** products on the grid.
+
+**Expect:**
+
+- Rank order changes after each interaction (hybrid variant blends session behavior).
+- Product cards show **“Why am I seeing this?”** captions.
+- Optional: **Semantic profile (Bronze → Silver → Gold)** expander with merged signals.
+
+### Tab 3 — Marketing & Ads
+
+**Steps:** Open after Tab 1 + some Tab 2 clicks.
+
+**Expect:**
+
+- Shoe email status string (suppress vs eligible) from `shoe_email_status()`.
+- Propensity-gated push section; score > **0.75** may queue a notification.
+- Sidebar **MarTech Backend: Propensity Logs** table fills with evaluations.
+
+**Note:** Tabs 3–4 auction path may error (`auction.py` `seller_id` bug)—use Tabs 1, 2, 8 for a clean live path.
+
+### Tab 8 — GenAI Agent Studio — expected results
+
+**Steps:**
+
+1. Set **CDP external_id** to `USER_7721`.
+2. Paste the [sample prompt](#sample-tab-8-prompt) in **Ask the MarTech agent…**.
+3. Expand **Agent Reasoning Telemetry Trace**.
+
+**Expect (CDP mode — Supabase configured):**
+
+| Telemetry step | What you should see |
+|----------------|---------------------|
+| CDP golden record stitch | Segment **High-Value Runner**; interests Marathon / Trail |
+| Guardrail evaluation | **Shoe promotions SUPPRESSED** warning |
+| Semantic vector retrieval | Query focused on hydration/accessories; **Footwear excluded**; ≥1 SKU (e.g. `ACC-004`) |
+| `queue_notification` | **Complete** if `outreach_allowed` and inventory exists |
+
+**Chat assistant reply should include:**
+
+- Guardrail status (shoe suppression active).
+- Top SKU recommendation (hydration vest, not shoes).
+- Outreach **queued** or **SUPPRESSED** with explicit reason.
+
+**UI:**
+
+- User and assistant messages in chat history (`st.session_state.agent_messages`).
+- Green **`st.success`** card with **simulated push notification** copy (channel Push, message text).
+
+**Expect (simulator fallback — no Supabase / CDP on Python 3.14):**
+
+- Yellow banner: CDP agent runtime not loaded.
+- After Tab 1 simulation: telemetry uses in-memory catalog; shoe suppress message from `shoe_email_status()`; non-footwear products from local DataFrame.
+
+### Tab 8 — what *not* to expect without setup
+
+| Missing setup | Symptom |
+|---------------|---------|
+| Migration not run | Error: `consumers` table not found |
+| Seed not run | `USER_7721` not found |
+| Embeddings not backfilled | Empty vector search `[]` |
+| OpenAI quota exhausted | Use instrumented mode (toggle OFF), not full LLM |
+| Tab 1 not run (fallback only) | “Run Simulation first” message |
+
+---
+
+## Quick start (classic 7-tab flow)
 
 1. Open **Member & Strategy**, pick a member, set privacy and sliders, then click **Run Simulation**.
-2. Open **Recommendations** — use **View** / **Click** on the live product grid; ranking updates on each interaction without resetting the app.
-3. Toggle **Recommendation Variant** (horizontal radios below KPI metrics) to compare behavioral-only vs. hybrid ranking.
-4. Open **Marketing & Ads** — review email rules and propensity-gated push (interact in Recommendations first to raise propensity above 0.75).
-5. Explore **Portfolio Metrics**, **A/B Testing Lab**, **Trust & Safety**, and **Architecture Diagram** as needed.
+2. Open **Recommendations** — use **View** / **Click** on the live product grid; ranking updates on each interaction.
+3. Toggle **Recommendation Variant** (horizontal radios below KPI metrics).
+4. Open **Marketing & Ads** — propensity-gated push (interact in Recommendations first to raise propensity above 0.75).
+5. Open **GenAI Agent Studio** — run the [Tab 8 prompt](#sample-tab-8-prompt).
+6. Explore other tabs as time allows.
 
 ## Interview framing (FAANG-style)
 
@@ -339,26 +579,30 @@ After pushing changes to GitHub, Streamlit Community Cloud redeploys from `main`
 2. Open [share.streamlit.io](https://share.streamlit.io) → your app → verify **Repository** `bharat2476/blank-app`, **Branch** `main`, **Main file** `streamlit_app.py`.
 3. Check deploy logs for errors, then **Reboot app** and hard-refresh the URL (Ctrl+F5).
 
-**Signs the new build is live:** **PersonaScale AI** header and KPI shelf; **Recommendation Variant** horizontal radios below KPIs; Recommendations tab includes **Retail Recommendation Shelf**; Marketing & Ads includes **Push Notification (Propensity-Gated)**.
+**Signs the new build is live:** **PersonaScale AI** header and KPI shelf; **Recommendation Variant** horizontal radios below KPIs; Recommendations tab includes **Retail Recommendation Shelf**; Marketing & Ads includes **Push Notification (Propensity-Gated)**; eighth tab **GenAI Agent Studio** with chat + telemetry trace.
 
-## How to run it on your own machine
+**Tab 8 on Streamlit Cloud** requires secrets (`SUPABASE_URL`, `SUPABASE_KEY`, optional `OPENAI_API_KEY`) in the app settings—**local demo is recommended** for the full Agentic RAG path.
 
-1. Install the requirements
+## Troubleshooting
 
-   ```
-   $ pip install -r requirements.txt
-   ```
+| Symptom | Fix |
+|---------|-----|
+| `pip install -r requirements.txt` fails on Python 3.14 with `pyiceberg` / MSVC | Use `requirements.txt` only for Streamlit; install CDP stack in `.venv-cdp` via `setup-cdp-venv.ps1` |
+| `consumers` table not found | Run migration SQL in Supabase SQL Editor |
+| `USER_7721` not found | Run `supabase/seed_demo.sql` |
+| Vector search returns `[]` | Run `scripts/backfill_product_embeddings.py` |
+| Supabase 401 Invalid API key | Use anon JWT (`eyJ...`) from Project Settings → API |
+| `OPENAI_API_KEY is not set` | Add to `.env` or leave Tab 8 LLM toggle OFF |
+| OpenAI 429 / insufficient_quota | Tab 8: disable LLM toggle; use `python martech_agent.py --demo ...` |
+| Tab 8 CDP warning on Streamlit 3.14 | Expected; run Tab 1 simulation for fallback, or use CDP venv for CLI tests |
+| Tabs 3–4 auction errors | Known `auction.py` issue — demo Tabs 1, 2, 8 |
+| `.env` not loading OpenAI key | Remove invalid `//` comment lines; use `#` only |
 
-2. Run the app (Python/Streamlit — not `npm`)
+See also **`PRE_DEMO.md`** for a printable runbook.
 
-   ```
-   $ python -m streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false
-   ```
+## Verify imports (optional)
 
-   Open **http://localhost:8501** in your browser. Do not use `npm run dev` (that starts a separate Node monorepo on port 3001).
-
-3. Verify imports (optional)
-
-   ```
-   $ python -c "import streamlit_app"
-   ```
+```powershell
+python -c "import streamlit_app"
+.\.venv-cdp\Scripts\python.exe -c "from martech_agent import MARTECH_TOOLS; print(len(MARTECH_TOOLS))"
+```

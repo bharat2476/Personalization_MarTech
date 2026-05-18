@@ -8,11 +8,27 @@ This is a single-process Python/Streamlit web app — a **Marketplace Personaliz
 
 ### Running the app
 
+**Streamlit only** (Python 3.10–3.14; system Python is fine):
+
 ```
+pip install -r requirements.txt
 streamlit run streamlit_app.py --server.enableCORS false --server.enableXsrfProtection false --server.headless true
 ```
 
+Or: `.\scripts\run-streamlit.ps1`
+
 The app serves on port **8501**. See `README.md` for the canonical setup steps.
+
+### CDP pipeline (`cdp_pipeline.py`)
+
+Requires **Python 3.11 or 3.12** (not 3.14 — `supabase` / `sentence-transformers` lack wheels on Windows).
+
+```
+.\scripts\setup-cdp-venv.ps1
+.\.venv-cdp\Scripts\Activate.ps1
+```
+
+Set `SUPABASE_URL` and `SUPABASE_KEY`, then use `requirements-cdp.txt` in that venv only.
 
 ### Known issues
 
