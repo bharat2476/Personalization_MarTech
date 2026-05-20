@@ -1,18 +1,192 @@
 # Personalization & Marketing Tech Simulator
 
-This Streamlit portfolio app demonstrates a recommendation engine and marketing
-technology platform for a digital marketplace. It simulates how behavioral signals,
-browser intent, app signals, customer lifecycle, and merchandising goals can
-work together to recommend products and decide when marketing emails should be
-suppressed or reactivated.
+**PersonaScale AI** is an interactive demo of how a digital marketplace personalizes product recommendations, explains those choices, and decides when to send marketing messages — while respecting privacy and business rules.
 
-Core UI logic lives in `streamlit_app.py`. MarTech signal processing, hybrid ranking,
-and propensity-gated notifications are encapsulated in `martech_engine.py`.
+## Choose your view
 
-**Agentic RAG (new):** A production-style CDP on **Supabase + pgvector** (`cdp_pipeline.py`),
-an autonomous campaign agent (`martech_agent.py`), and **Tab 8: GenAI Agent Studio**
-(`genai_agent_studio.py`) demonstrate natural-language orchestration over golden records,
-guardrails, vector retrieval, and notification queueing.
+Pick the guide that matches how you work:
+
+| Persona | Best for | Jump to |
+|---------|----------|---------|
+| **Non Tech** | Business stakeholders, product managers, interview storytelling, first-time viewers | **[Non Tech Persona →](#non-tech-persona)** |
+| **Tech** | Engineers, architects, demo operators, Supabase/CDP setup | **[Tech Persona →](#tech-persona)** |
+
+---
+
+## Non Tech Persona
+
+> **PersonaScale AI — explained simply**  
+> Think of this as a **practice store** on your computer. It is not a real shop with real customers — it is a **demonstration** of how a big online marketplace could show the right products to the right person, at the right time, without annoying them.
+
+### What is the objective?
+
+**Main goal:** Help a marketplace sell more *relevant* products while respecting customer privacy and not over-messaging people.
+
+The product tries to answer three questions for every shopper:
+
+1. **What should we show them?** — Which products belong in their “Recommended for you” section?
+2. **Why are we showing it?** — Can we explain it clearly? (e.g. “You like running gear” or “You clicked on hydration vests today”)
+3. **Should we email or push-notify them?** — Or should we stay quiet? (e.g. don’t send shoe ads if they just bought shoes last week)
+
+**Business outcomes the demo illustrates:**
+
+- Happier customers (relevant suggestions, not random ads)
+- More sales (better matching)
+- Fewer complaints (respect privacy, don’t spam)
+- Smarter marketing (send messages only when it makes sense)
+
+### What business problem does it simulate?
+
+Imagine a **sports retail website** with **500 products** and **100 sample members** (new customers, loyal runners, lapsed buyers, and more).
+
+The app shows how a company would:
+
+- Personalize what each person sees
+- Run marketing campaigns (email, push notifications)
+- Test two different approaches (Variant A vs B) to see which works better
+- Use AI to help a marketing team make decisions
+
+### The workflow — step by step
+
+```
+Pick a customer  →  See personalized products  →  Decide on marketing  →  Measure results
+```
+
+#### Step 1: Choose your customer (Tab 1 — Member & Strategy)
+
+**What you do:** Pick a type of shopper — e.g. a “High-Value Runner,” a new customer, someone who shares a lot of data vs. someone who shares very little.
+
+**What it represents:** In real life, every customer has a profile: what they told you they like, what they bought before, whether they opted into emails, and so on.
+
+**Why it matters:** You can’t personalize for “everyone.” You start with *one person’s* situation.
+
+#### Step 2: Show personalized products (Tab 2 — Recommendations)
+
+**What you do:** Browse a product grid. Click **View** or **Click** on items. The list reorders as you interact.
+
+**What it represents:** When you shop online, the site watches what you look at and adjusts what it shows next — like when Netflix suggests shows based on what you watched.
+
+**Two ways to rank products:**
+
+| | **Variant A** | **Variant B** (default) |
+|---|---------------|-------------------------|
+| **Simple idea** | “What are you doing *right now*?” | “Who are you *plus* what are you doing now?” |
+| **Example** | You clicked 3 hydration vests → show more hydration gear | You’re a marathon runner *and* you clicked vests → show running + hydration mix |
+
+Each product can show **“Why am I seeing this?”** so the system isn’t a black box.
+
+#### Step 3: Marketing decisions (Tab 3 — Marketing & Ads)
+
+**What you do:** See whether this customer should get an email or push notification — or nothing.
+
+**What it represents:** Real companies don’t blast everyone. They have rules like:
+
+- “They bought shoes 2 weeks ago → don’t push shoe ads yet”
+- “They’ve had 3 emails this week → stop, we’re at the limit”
+- “They didn’t consent to marketing → don’t contact them”
+
+**Propensity score (0 to 1):** A “readiness to message” score. Only if it’s high enough (above **0.75**) does the system queue a push notification. Otherwise it **suppresses** — on purpose.
+
+#### Step 4: Measure and experiment (Tabs 4 & 5)
+
+- **Portfolio Metrics** — executive view: clicks, conversions, return on ad spend
+- **A/B Testing Lab** — compare two strategies (Variant A vs B) before rolling out to millions of users
+
+Like testing two email subject lines, but for the whole recommendation experience.
+
+#### Step 5: Trust & architecture (Tabs 6 & 7)
+
+How a real company would explain privacy principles and how data flows from the website → decision engine → marketing message. Useful for stakeholders and roadmap conversations.
+
+#### Step 6: AI marketing assistant (Tab 8 — GenAI Agent Studio)
+
+**What you do:** Type in plain English, e.g.:
+
+```text
+This customer looked at shoes 3 times but bought shoes 2 weeks ago.
+Suggest hydration gear, not shoes.
+```
+
+**What it represents:** A marketing employee asks an AI assistant to:
+
+1. Look up the customer profile
+2. Check the rules (can we contact them? are shoe promos blocked?)
+3. Search the product catalog for good matches
+4. Decide whether to send a notification
+
+**Built-in demo example:** Customer `USER_7721` — a serious runner who recently bought shoes. The system should **not** push more shoes; it should suggest something like a hydration vest instead.
+
+### The big picture
+
+```
+Customer shops on website
+        ↓
+System collects signals (what they like, what they click, what they bought)
+        ↓
+System ranks products (personalized shelf)
+        ↓
+System scores “should we message them?”
+        ↓
+If yes AND rules allow → send email/push
+If no → stay quiet (suppression)
+        ↓
+Measure results → test improvements (A/B)
+```
+
+### What this product is — and is not
+
+| It is | It is not |
+|-------|-----------|
+| A **demo / simulator** | A live production store |
+| A **portfolio piece** to show product thinking | Software you install for your own shop tomorrow |
+| Uses **fake data** (500 products, 100 members) | Real customer databases |
+| Shows **how decisions would be made** | A finished Amazon-scale system |
+
+### One-sentence summary
+
+**PersonaScale AI is an interactive demo that shows how an online marketplace can personalize product recommendations, explain those choices, send marketing only when appropriate, and use AI to help marketers — all while respecting privacy and business rules.**
+
+### Try it (no setup required)
+
+Open the live demo: **https://blank-app-zwp52hqbzm2sxhgqckmv6w.streamlit.app/**
+
+**5-minute path:** Tab 1 → Run Simulation → Tab 2 → click a few products → Tab 3 → check push/email rules → Tab 8 → try the sample prompt for `USER_7721`.
+
+Need setup, architecture, or code details? Switch to the **[Tech Persona →](#tech-persona)** guide.
+
+[↑ Back to Choose your view](#choose-your-view)
+
+---
+
+## Tech Persona
+
+Technical reference for engineers, architects, and demo operators. Covers architecture, modules, Supabase CDP setup, variant scoring, and runbooks.
+
+**Quick jump:**
+
+| Topic | Section |
+|-------|---------|
+| Capabilities & demo data | [Demo scope](#demo-scope) |
+| Code layout | [Project structure](#project-structure) |
+| Production target architecture | [Production architecture blueprint](#production-architecture-blueprint-scalable-infra) |
+| App tabs & sidebar | [Current app tabs](#current-app-tabs) · [Sidebar controls](#sidebar-controls) |
+| Variant A vs B (STAR) | [Recommendation Variants — STAR Guide](#recommendation-variants--star-guide-variant-a-vs-b) |
+| CDP + GenAI agent | [Agentic RAG, CDP, and autonomous agent](#agentic-rag-cdp-and-autonomous-agent) |
+| Supabase setup | [Before demo — complete checklist](#before-demo--complete-checklist) |
+| Run locally | [How to run locally](#how-to-run-locally) |
+| Live demo script | [Demo script (5–7 minutes)](#demo-script-57-minutes-and-expected-results) |
+| Scoring formulas | [Scoring logic](#scoring-logic) |
+| Fixes | [Troubleshooting](#troubleshooting) |
+
+Core UI logic lives in `streamlit_app.py`. MarTech signal processing, hybrid ranking, and propensity-gated notifications are encapsulated in `martech_engine.py`.
+
+**Agentic RAG:** Production-style CDP on **Supabase + pgvector** (`cdp_pipeline.py`), autonomous campaign agent (`martech_agent.py`), and **Tab 8: GenAI Agent Studio** (`genai_agent_studio.py`) demonstrate natural-language orchestration over golden records, guardrails, vector retrieval, and notification queueing.
+
+Prefer a plain-language walkthrough? See **[Non Tech Persona →](#non-tech-persona)**.
+
+[↑ Back to Choose your view](#choose-your-view)
+
+---
 
 ## Demo scope
 
@@ -712,3 +886,14 @@ See also **`PRE_DEMO.md`** for a printable runbook.
 python -c "import streamlit_app"
 .\.venv-cdp\Scripts\python.exe -c "from martech_agent import MARTECH_TOOLS; print(len(MARTECH_TOOLS))"
 ```
+
+---
+
+## Documentation personas
+
+| Persona | Description |
+|---------|-------------|
+| **[Non Tech Persona](#non-tech-persona)** | Business workflow, objectives, and 5-minute demo path — no code required |
+| **[Tech Persona](#tech-persona)** | Architecture, modules, setup, scoring, and troubleshooting |
+
+[↑ Back to Choose your view](#choose-your-view)
