@@ -1,4 +1,4 @@
-# Personalization & Ad Targeting Simulator
+# Personalization & Marketing Tech Simulator
 
 This Streamlit portfolio app demonstrates a recommendation engine and marketing
 technology platform for a digital marketplace. It simulates how behavioral signals,
