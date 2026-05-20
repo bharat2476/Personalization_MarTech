@@ -150,7 +150,9 @@ Measure results → test improvements (A/B)
 
 Open the live demo: **https://blank-app-zwp52hqbzm2sxhgqckmv6w.streamlit.app/**
 
-**5-minute path:** Tab 1 → Run Simulation → Tab 2 → click a few products → Tab 3 → check push/email rules → Tab 8 → try the sample prompt for `USER_7721`.
+**Start here:** Open the **Product Guide** tab in the app for this same walkthrough.
+
+**5-minute path:** **Product Guide** → Tab 1 → Run Simulation → Tab 2 → click a few products → Tab 3 → check push/email rules → Tab 8 → try the sample prompt for `USER_7721`.
 
 Need setup, architecture, or code details? Switch to the **[Tech Persona →](#tech-persona)** guide.
 
@@ -226,7 +228,8 @@ Prefer a plain-language walkthrough? See **[Non Tech Persona →](#non-tech-pers
 
 | File / path | Purpose |
 |-------------|---------|
-| `streamlit_app.py` | PersonaScale AI UI, 8 tabs, session state, command-bar variant controls |
+| `streamlit_app.py` | PersonaScale AI UI, 9 tabs, session state, command-bar variant controls |
+| `product_guide.py` | Tab 0 — Non Tech Persona product guide (in-app onboarding) |
 | `personascale_ui.py` | Enterprise CSS, KPI shelf, product cards, engine telemetry |
 | `martech_engine.py` | Medallion layers, hybrid ranking, interaction tracking, propensity scoring |
 | `genai_agent_studio.py` | Tab 8 — chat, telemetry trace, CDP/simulator orchestration UI |
@@ -339,6 +342,7 @@ flowchart TB
 
 | Tab | Name | Primary demo value |
 |-----|------|-------------------|
+| 0 | **Product Guide** | **Non Tech Persona** — what the product does, workflow, 5-minute path (start here) |
 | 1 | Member & Strategy | Configure member, privacy, sliders; **Run Simulation** (required for Tab 8 fallback) |
 | 2 | Recommendations | Live grid, hybrid ranking, explainability |
 | 3 | Marketing & Ads | Email rules, propensity-gated push |

@@ -43,6 +43,7 @@ from personascale_ui import (
     render_product_grid,
 )
 from genai_agent_studio import render_genai_agent_studio_tab
+from product_guide import render_product_guide_tab
 
 st.set_page_config(
     page_title="PersonaScale AI | Real-Time Orchestration",
@@ -97,7 +98,8 @@ if "users" not in st.session_state:
 # TABS
 # ---------------------------------------------------------
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+tab0, tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
+    "Product Guide",
     "Member & Strategy",
     "Recommendations",
     "Marketing & Ads",
@@ -107,6 +109,13 @@ tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8 = st.tabs([
     "Architecture Diagram",
     "GenAI Agent Studio",
 ])
+
+# ---------------------------------------------------------
+# TAB 0 — PRODUCT GUIDE (NON TECH PERSONA)
+# ---------------------------------------------------------
+
+with tab0:
+    render_product_guide_tab()
 
 # ---------------------------------------------------------
 # TAB 1 — SIMULATION CONFIG
