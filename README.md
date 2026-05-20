@@ -176,8 +176,112 @@ flowchart TB
 
 ## Sidebar controls
 
-- **Recommendation Variant** — Variant A (behavioral-only) or Variant B (hybrid: 70% base ranker + 30% session behavioral).
+- **Recommendation Variant** — Variant A (behavioral-only) or Variant B (hybrid: 70% base ranker + 30% session behavioral). See [Recommendation Variants — STAR Guide](#recommendation-variants--star-guide-variant-a-vs-b) for when to use each.
 - **MarTech Backend: Propensity Logs** — expandable log of push propensity evaluations (score, threshold, queued vs. suppressed).
+
+---
+
+## Recommendation Variants — STAR Guide (Variant A vs B)
+
+Use this guide to pick the right ranking variant for your demo, interview story, or A/B experiment. Toggle variants with the **horizontal radio buttons** below the KPI shelf (main panel), or confirm the active arm in the sidebar **Experiment Controls**.
+
+### Situation
+
+A marketplace member is browsing the **Recommendations** tab. The platform must rank ~500 products in real time using a mix of:
+
+- **0-party signals** — declared interests, browser intent, app affinity, lifecycle stage, audience fit, margin, and explore/exploit sliders (configured on Tab 1).
+- **Behavioral signals** — in-session **View** / **Click** events, plus mock 1st-party history (dwell time, prior purchases, email engagement from `seed_data`).
+
+Two ranking strategies are available as an A/B experiment: **Variant A** and **Variant B**. Each produces a different product order and different “Why am I seeing this?” explanations on the product grid.
+
+### Task
+
+Choose the variant that matches the story you want to tell:
+
+| Your goal | Recommended variant |
+|-----------|---------------------|
+| Show **instant session retargeting** after View/Click | **Variant A** |
+| Show **balanced personalization** (profile + session) | **Variant B** (default) |
+| Demo **lifecycle / merchandising** rules from Tab 1 sliders | **Variant B** |
+| Demo **privacy-limited** profiles (Limited / No app usage consent) | **Variant A** |
+| Run the **A/B Testing Lab** “behavior-only” control arm | **Variant A** |
+| Run the **A/B Testing Lab** “hybrid” treatment arm | **Variant B** |
+| Raise **propensity score** quickly via clicks for Tab 3 push demo | **Variant A** (faster rerank from session activity) |
+| Present a **production-like** default experience to stakeholders | **Variant B** |
+
+### Actions
+
+#### How to switch variants
+
+1. Open **Tab 1 — Member & Strategy** → configure member, privacy, sliders → **Run Simulation**.
+2. Open **Tab 2 — Recommendations**.
+3. Select **Variant A: Behavioral-Only** or **Variant B: Hybrid Model** on the horizontal radios below KPI metrics.
+4. Click **View** or **Click** on product cards — ranking re-runs immediately on each interaction.
+
+#### What each variant does (scoring)
+
+| | **Variant A: Behavioral-Only** | **Variant B: Hybrid Model** |
+|---|-------------------------------|----------------------------|
+| **Primary signal** | Session + 1st-party behavioral affinity | Full 0-party ranker **blended** with behavioral |
+| **Scoring formula** | `72% behavioral + 14% popularity + 10% trend + 4% recency` | `70% rank_products() base score + 30% behavioral` |
+| **Uses Tab 1 explore/exploit slider** | No — behavioral and catalog signals dominate | Yes — passed through `rank_products()` |
+| **Uses lifecycle / interest / browser / app scores** | Indirectly (behavioral layer only) | Yes — full weighted 0-party model |
+| **Responds to View/Click** | Strongly — grid reshuffles within 1–2 clicks | Moderately — session nudges an already profile-ranked list |
+| **Default in app** | No | **Yes** (`Variant B` is the default) |
+
+**Behavioral score** (used by both variants) combines:
+
+- **Session activity (55%)** — per-product views/clicks and category-level engagement from the current Streamlit session.
+- **Mock 1st-party history (45%)** — high-dwell categories, affinity tag overlap, prior purchases, and email clicks from `seed_data.get_mock_1st_party_data()`.
+
+Implementation: `rank_products_variant()` in `martech_engine.py`.
+
+#### Variant A — Behavioral-Only (detail)
+
+- Ignores the full `rank_products()` composite score for ordering.
+- Best when the member’s **current session intent** should drive the shelf — e.g., “They clicked three hydration vests; surface accessories now.”
+- Product cards show **“Why am I seeing this? [Behavioral-only ranking] …”** when session or 1st-party activity is strong.
+
+#### Variant B — Hybrid Model (detail)
+
+- Runs the complete 0-party ranker first (`interest_score`, `browser_score`, `app_score`, `lifecycle_score`, explore/exploit noise, margin boosts, etc.).
+- Layers behavioral affinity on top at **30%** weight so merchandising guardrails stay intact while session clicks still matter.
+- Product cards show **“Why am I seeing this? [Hybrid ranking] … hybrid model blending 0-party + behavioral scores”** when behavioral contribution is non-zero.
+
+### Results
+
+#### Expected outcomes by variant
+
+| Scenario | Variant A result | Variant B result |
+|----------|------------------|------------------|
+| Fresh session, no clicks yet | Trending / popular / recency-led shelf; weak tie to declared interests | Interest-, lifecycle-, and browser-aligned shelf from Tab 1 profile |
+| After 2–3 Views on one category | That category climbs to top quickly | Top products shift modestly; profile-fit items often remain near top |
+| **Explore vs Exploit** slider at 80% exploit | Minimal effect on rank order | Exploit weights strongly shape base score before behavioral blend |
+| **Limited consent** privacy mode | Still reranks from session clicks; less 0-party dependency | Base ranker uses reduced signal set; hybrid still applies |
+| **A/B Testing Lab** narrative | Control arm: “What if we only used clickstream?” | Treatment arm: “What if we blended CRM profile + clickstream?” |
+
+#### Quick decision flow
+
+```
+Need session clicks to visibly move the grid in < 30 seconds?
+  └─ Yes → Variant A
+
+Need Tab 1 sliders (explore/exploit, lifecycle member) to affect ranking?
+  └─ Yes → Variant B
+
+Interview / stakeholder demo of “full” PersonaScale personalization?
+  └─ Yes → Variant B (default)
+
+Demo real-time retargeting or propensity-from-clicks for Tab 3 push?
+  └─ Yes → Variant A, then click products before opening Marketing & Ads
+```
+
+#### Where to validate results
+
+- **Tab 2 — Recommendations** — product grid order and per-card **“Why am I seeing this?”** captions.
+- **Sidebar — Experiment Controls** — confirms active variant label.
+- **Tab 5 — A/B Testing Lab** — frame Variant A as control, Variant B as treatment in experiment design.
+- **Tab 3 — Marketing & Ads** — propensity score rises with session engagement; Variant A often reaches the **0.75** push threshold faster after heavy clicking.
 
 ---
 
@@ -436,10 +540,12 @@ Artifacts: campaign reports in `artifacts/campaign_runs/`; queued pushes in `art
 
 ### Recommendation variants
 
-| Variant | Behavior |
-|---------|----------|
-| **Variant A: Behavioral-Only** | Ranks primarily from session views/clicks plus popularity, trend, and recency. |
-| **Variant B: Hybrid Model** | Blends the existing 0-party `rank_products()` score with `behavioral_score` (70% / 30%). |
+See the full **[Recommendation Variants — STAR Guide](#recommendation-variants--star-guide-variant-a-vs-b)** for Situation / Task / Actions / Results and a use-case decision table.
+
+| Variant | One-line summary |
+|---------|------------------|
+| **Variant A: Behavioral-Only** | `72%` behavioral + popularity/trend/recency; session clicks dominate. |
+| **Variant B: Hybrid Model** | `70%` full 0-party `rank_products()` + `30%` behavioral (app default). |
 
 Session interactions update `behavioral_score` per product and category in real time via Streamlit reruns.
 
