@@ -1,6 +1,6 @@
 # Personalization & Marketing Tech Simulator
 
-**PersonaScale AI** is an interactive demo of how a digital marketplace personalizes product recommendations, explains those choices, and decides when to send marketing messages — while respecting privacy and business rules.
+This interactive demo shows how a digital marketplace personalizes product recommendations, explains those choices, and decides when to send marketing messages — while respecting privacy and business rules.
 
 ## Choose your view
 
@@ -15,7 +15,7 @@ Pick the guide that matches how you work:
 
 ## Non Tech Persona
 
-> **PersonaScale AI — explained simply**  
+> **Personalization & Marketing Tech Simulator — explained simply**  
 > Think of this as a **practice store** on your computer. It is not a real shop with real customers — it is a **demonstration** of how a big online marketplace could show the right products to the right person, at the right time, without annoying them.
 
 ### What is the objective?
@@ -144,7 +144,7 @@ Measure results → test improvements (A/B)
 
 ### One-sentence summary
 
-**PersonaScale AI is an interactive demo that shows how an online marketplace can personalize product recommendations, explain those choices, send marketing only when appropriate, and use AI to help marketers — all while respecting privacy and business rules.**
+**Personalization & Marketing Tech Simulator is an interactive demo that shows how an online marketplace can personalize product recommendations, explain those choices, send marketing only when appropriate, and use AI to help marketers — all while respecting privacy and business rules.**
 
 ### Try it (no setup required)
 
@@ -228,7 +228,7 @@ Prefer a plain-language walkthrough? See **[Non Tech Persona →](#non-tech-pers
 
 | File / path | Purpose |
 |-------------|---------|
-| `streamlit_app.py` | PersonaScale AI UI, 9 tabs, session state, command-bar variant controls |
+| `streamlit_app.py` | Personalization & Marketing Tech Simulator UI, 9 tabs, session state, command-bar variant controls |
 | `product_guide.py` | Tab 0 — Non Tech Persona product guide (in-app onboarding) |
 | `personascale_ui.py` | Enterprise CSS, KPI shelf, product cards, engine telemetry |
 | `martech_engine.py` | Medallion layers, hybrid ranking, interaction tracking, propensity scoring |
@@ -252,7 +252,7 @@ Prefer a plain-language walkthrough? See **[Non Tech Persona →](#non-tech-pers
 
 ## Production architecture blueprint (scalable infra)
 
-This prototype (`PersonaScale AI`) simulates the product surface in Streamlit. The blueprint below is the **target production architecture** for scaling real-time personalization, feature serving, and propensity-gated push orchestration.
+This prototype (`Personalization & Marketing Tech Simulator`) simulates the product surface in Streamlit. The blueprint below is the **target production architecture** for scaling real-time personalization, feature serving, and propensity-gated push orchestration.
 
 ### End-to-end flow
 
@@ -302,7 +302,7 @@ flowchart TB
 
 ### Layer responsibilities
 
-| Layer | Production service | Role in PersonaScale |
+| Layer | Production service | Role in simulator |
 |-------|-------------------|----------------------|
 | Experience | Streamlit → Web/Mobile app | Member strategy UI, recommendation shelf, telemetry (demo: `streamlit_app.py`, `personascale_ui.py`) |
 | Clickstream | Kafka / Pub/Sub | Durable async events: views, clicks, PDP dwell, cart signals |
@@ -447,7 +447,7 @@ Need session clicks to visibly move the grid in < 30 seconds?
 Need Tab 1 sliders (explore/exploit, lifecycle member) to affect ranking?
   └─ Yes → Variant B
 
-Interview / stakeholder demo of “full” PersonaScale personalization?
+Interview / stakeholder demo of “full” Personalization & Marketing Tech Simulator personalization?
   └─ Yes → Variant B (default)
 
 Demo real-time retargeting or propensity-from-clicks for Tab 3 push?
@@ -863,7 +863,7 @@ After pushing changes to GitHub, Streamlit Community Cloud redeploys from `main`
 2. Open [share.streamlit.io](https://share.streamlit.io) → your app → verify **Repository** `bharat2476/blank-app`, **Branch** `main`, **Main file** `streamlit_app.py`.
 3. Check deploy logs for errors, then **Reboot app** and hard-refresh the URL (Ctrl+F5).
 
-**Signs the new build is live:** **PersonaScale AI** header and KPI shelf; **Recommendation Variant** horizontal radios below KPIs; Recommendations tab includes **Retail Recommendation Shelf**; Marketing & Ads includes **Push Notification (Propensity-Gated)**; eighth tab **GenAI Agent Studio** with chat + telemetry trace.
+**Signs the new build is live:** **Personalization & Marketing Tech Simulator** header and KPI shelf; **Recommendation Variant** horizontal radios below KPIs; Recommendations tab includes **Retail Recommendation Shelf**; Marketing & Ads includes **Push Notification (Propensity-Gated)**; eighth tab **GenAI Agent Studio** with chat + telemetry trace.
 
 **Tab 8 on Streamlit Cloud** requires secrets (`SUPABASE_URL`, `SUPABASE_KEY`, optional `OPENAI_API_KEY`) in the app settings—**local demo is recommended** for the full Agentic RAG path.
 

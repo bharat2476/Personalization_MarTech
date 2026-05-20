@@ -1,4 +1,4 @@
-# PersonaScale AI - Pre-demo setup and health checks
+# Personalization & Marketing Tech Simulator - Pre-demo setup and health checks
 # Usage: .\scripts\pre-demo.ps1
 #        .\scripts\pre-demo.ps1 -StartStreamlit
 
@@ -18,7 +18,7 @@ function Write-Ok($msg)   { Write-Host "  OK  $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "  !!  $msg" -ForegroundColor Yellow }
 function Write-Fail($msg) { Write-Host "  XX  $msg" -ForegroundColor Red }
 
-Write-Host "`n=== PersonaScale AI - Pre-Demo Checklist ===" -ForegroundColor White
+Write-Host "`n=== Personalization & Marketing Tech Simulator - Pre-Demo Checklist ===" -ForegroundColor White
 
 Write-Step 1 "Python runtimes"
 try {

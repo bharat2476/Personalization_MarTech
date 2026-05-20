@@ -34,6 +34,8 @@ from metrics import (
     compute_small_seller_share
 )
 from personascale_ui import (
+    APP_NAME,
+    APP_PAGE_TITLE,
     _variant_label,
     inject_enterprise_css,
     render_brand_header,
@@ -46,7 +48,7 @@ from genai_agent_studio import render_genai_agent_studio_tab
 from product_guide import render_product_guide_tab
 
 st.set_page_config(
-    page_title="PersonaScale AI | Real-Time Orchestration",
+    page_title=APP_PAGE_TITLE,
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -64,7 +66,7 @@ def _on_product_click(product_id, category):
 
 
 with st.sidebar:
-    st.markdown("### PersonaScale AI")
+    st.markdown(f"### {APP_NAME}")
     st.caption("Orchestration control plane")
     st.subheader("Experiment Controls")
     active_variant = st.session_state.get("rec_variant", REC_VARIANT_HYBRID)
@@ -710,7 +712,7 @@ with tab7:
     st.header("Architecture Diagram")
     diagram_path = Path(__file__).with_name("architecture diagram.png")
     if diagram_path.exists():
-        st.image(str(diagram_path), caption="PersonaScale AI architecture workflow", use_container_width=True)
+        st.image(str(diagram_path), caption=f"{APP_NAME} architecture workflow", use_container_width=True)
     else:
         st.warning("Architecture diagram file not found. Expected: architecture diagram.png")
 

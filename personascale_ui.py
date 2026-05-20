@@ -1,4 +1,4 @@
-"""PersonaScale AI — enterprise visual layer and telemetry helpers."""
+"""Personalization & Marketing Tech Simulator — enterprise visual layer and telemetry helpers."""
 
 from __future__ import annotations
 
@@ -16,6 +16,9 @@ from martech_engine import (
     compute_propensity_score,
 )
 from seed_data import get_mock_1st_party_data
+
+APP_NAME = "Personalization & Marketing Tech Simulator"
+APP_PAGE_TITLE = f"{APP_NAME} | MarTech Demo"
 
 
 def inject_enterprise_css() -> None:
@@ -238,9 +241,9 @@ def inject_enterprise_css() -> None:
 
 def render_brand_header() -> None:
     st.markdown(
-        """
+        f"""
         <div class="ps-brand-header">
-          <p class="ps-brand-title">PersonaScale AI // Real-Time Orchestration Engine</p>
+          <p class="ps-brand-title">{APP_NAME} // Real-Time Orchestration Engine</p>
           <p class="ps-brand-sub">Enterprise MarTech command surface for consent-aware personalization,
           propensity orchestration, and retail decision transparency.</p>
         </div>

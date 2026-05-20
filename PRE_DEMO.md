@@ -1,4 +1,4 @@
-# PersonaScale AI — Pre-Demo Runbook
+# Personalization & Marketing Tech Simulator — Pre-Demo Runbook
 
 ## One-command health check
 

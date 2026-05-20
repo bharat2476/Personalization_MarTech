@@ -1,4 +1,4 @@
-# Run PersonaScale UI with base deps only (works on Python 3.14+)
+# Run Personalization & Marketing Tech Simulator UI (works on Python 3.14+)
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent $PSScriptRoot
 Set-Location $Root
