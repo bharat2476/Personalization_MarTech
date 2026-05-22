@@ -1,6 +1,6 @@
 # Personalization & Marketing Tech Simulator
 
-This interactive demo shows how a digital marketplace personalizes product recommendations, explains those choices, and decides when to send marketing messages — while respecting privacy and business rules.
+This interactive demo shows how a digital marketplace responds when **retention and average order value slip** — by combining **agentic RAG**, a **vector product catalog**, **Gemini-class GenAI**, real-time **next-purchase recommendations**, and **propensity-gated push notifications**, while respecting privacy and business rules.
 
 ## Choose your view
 
@@ -18,9 +18,18 @@ Pick the guide that matches how you work:
 > **Personalization & Marketing Tech Simulator — explained simply**  
 > Think of this as a **practice store** on your computer. It is not a real shop with real customers — it is a **demonstration** of how a big online marketplace could show the right products to the right person, at the right time, without annoying them.
 
+### Why this product was built
+
+| | |
+|---|---|
+| **Situation** | **Consumer retention** was falling and **average ticket per digital purchase** was declining. Shoppers were leaving without finding the right next product, and marketing was not timed to real intent. |
+| **Task** | Leadership aligned **data science**, **sales**, and **marketing** to review customer, browse, and purchase data and define a fix that could ship without wasting ad spend. |
+| **Decision** | Build a **real-time hyper-personalized recommendation engine** that predicts what a member is likely to buy next, paired with **agentic RAG** (an AI assistant that reasons over customer context), a **vector database** for semantic product search, and **cost-efficient Gemini models** for orchestration — then **push-notify** only when propensity and guardrails allow. |
+| **Target result** | Higher retention, larger baskets, fewer irrelevant messages, and explainable “why you’re seeing this” on every recommendation. |
+
 ### What is the objective?
 
-**Main goal:** Help a marketplace sell more *relevant* products while respecting customer privacy and not over-messaging people.
+**Main goal:** Turn around retention and average order value by showing the *right next product* at the *right moment* — without over-messaging people or ignoring privacy.
 
 The product tries to answer three questions for every shopper:
 
@@ -30,21 +39,33 @@ The product tries to answer three questions for every shopper:
 
 **Business outcomes the demo illustrates:**
 
-- Happier customers (relevant suggestions, not random ads)
-- More sales (better matching)
-- Fewer complaints (respect privacy, don’t spam)
-- Smarter marketing (send messages only when it makes sense)
+- **Higher retention** — members see relevant next purchases, not a generic homepage
+- **Larger average ticket** — cross-sell and replenishment surfaced at the right lifecycle moment
+- **Smarter push ROI** — notifications only when propensity and consent gates pass
+- **Cross-team alignment** — one workflow data science, sales, and marketing can demo together
+
+### What the solution includes (plain language)
+
+| Capability | What it does for the business |
+|------------|-------------------------------|
+| **Hyper-personalized recommendations** | Ranks products in real time from profile + session behavior (Variant A/B) |
+| **Next-purchase prediction** | Blends declared interests, browse intent, clicks, and history to surface what they may buy next |
+| **Vector database (semantic search)** | Finds products by *meaning* (e.g. “hydration for marathon training”), not just keywords |
+| **Agentic RAG (Tab 8)** | Marketing asks in natural language; AI pulls profile, checks rules, searches catalog, queues outreach |
+| **Gemini / GenAI orchestration** | Low-cost model tier for agent reasoning in the demo stack (optional full LLM toggle) |
+| **Propensity-gated push** | Sends mobile push only when score **> 0.75** and suppression rules allow |
 
 ### What business problem does it simulate?
 
-Imagine a **sports retail website** with **500 products** and **100 sample members** (new customers, loyal runners, lapsed buyers, and more).
+Imagine a **sports retail website** with **500 products** and **100 sample members** (new customers, loyal runners, lapsed buyers, and more) — the same scale pattern used when the retention and AOV crisis was analyzed.
 
 The app shows how a company would:
 
-- Personalize what each person sees
-- Run marketing campaigns (email, push notifications)
-- Test two different approaches (Variant A vs B) to see which works better
-- Use AI to help a marketing team make decisions
+- Personalize what each person sees in real time
+- Predict and promote the **next likely purchase**
+- Run **push notifications** for high-intent items (not blanket campaigns)
+- Test two ranking strategies (Variant A vs B) before a full rollout
+- Use **agentic RAG** so marketing and sales can run plays in plain English
 
 ### The workflow — step by step
 
@@ -119,18 +140,22 @@ Suggest hydration gear, not shoes.
 ### The big picture
 
 ```
+Retention & AOV under pressure → data science + sales + marketing review data
+        ↓
+Build: vector catalog + agentic RAG + real-time recommender + Gemini orchestration
+        ↓
 Customer shops on website
         ↓
-System collects signals (what they like, what they click, what they bought)
+System collects signals (profile, clicks, purchases, consent)
         ↓
-System ranks products (personalized shelf)
+Vector + ranker predict next likely purchase (personalized shelf)
         ↓
-System scores “should we message them?”
+Propensity score: should we push-notify?
         ↓
-If yes AND rules allow → send email/push
+If yes AND rules allow → hyper-personalized push for that item
 If no → stay quiet (suppression)
         ↓
-Measure results → test improvements (A/B)
+Measure retention, AOV, and A/B variants
 ```
 
 ### What this product is — and is not
@@ -144,7 +169,7 @@ Measure results → test improvements (A/B)
 
 ### One-sentence summary
 
-**Personalization & Marketing Tech Simulator is an interactive demo that shows how an online marketplace can personalize product recommendations, explain those choices, send marketing only when appropriate, and use AI to help marketers — all while respecting privacy and business rules.**
+**Personalization & Marketing Tech Simulator is an interactive demo born from a retention and average-ticket crisis — showing how agentic RAG, vector search, real-time next-purchase recommendations, and propensity-gated push can win back shoppers while respecting privacy and business rules.**
 
 ### Try it (no setup required)
 
@@ -163,6 +188,8 @@ Need setup, architecture, or code details? Switch to the **[Tech Persona →](#t
 ## Tech Persona
 
 Technical reference for engineers, architects, and demo operators. Covers architecture, modules, Supabase CDP setup, variant scoring, and runbooks.
+
+**Business context:** Built after retention and digital AOV declined; cross-functional analysis led to **agentic RAG** (`martech_agent.py`), **pgvector** semantic retrieval (`cdp_pipeline.py` + `match_products`), hybrid real-time ranking (`martech_engine.py`), and **propensity-gated push** (threshold **0.75**). GenAI orchestration targets cost-efficient models (e.g. **Gemini** via OpenAI-compatible or agent toggles in Tab 8).
 
 **Quick jump:**
 
