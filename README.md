@@ -835,7 +835,7 @@ final_score = (1.80×0.60) + (1.0×0.5) + (1.25×0.40) = 1.08 + 0.50 + 0.50 = 2.
 - **Explainability by default** — recommendations include plain-language rationale
 - **Experiment-driven iteration** — A/B testing with guardrails drives rollout decisions
 
-### Key trade-offs (for interview discussion)
+### Key trade-offs (Discussion topics)
 
 - **Relevance vs. exploration** — precision vs. discovery; managed via the explore/exploit slider
 - **Revenue vs. fairness** — monetization vs. marketplace diversity; managed via the ROAS/fairness slider
