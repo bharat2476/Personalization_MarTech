@@ -1,17 +1,38 @@
-# Model evaluation — complete runbook
+# Model Evaluation — Complete Runbook
 
-Deterministic and LLM-based evaluation for the MarTech CDP stack: **golden dataset**, **classification factors** (`top_k`, `temperature`, `top_p`), **phase 1** (retrieval + guardrails), and **phase 2** (autonomous agent).
+**Deterministic and LLM-based evaluation for the MarTech CDP stack.**
 
-Canonical copy also lives in the root **[README.md — Model evaluation](../README.md#model-evaluation)** section.
+This runbook covers the golden dataset, classification factors (`top_k`, `temperature`, `top_p`), phase 1 (retrieval + guardrails), and phase 2 (autonomous agent). The canonical summary also lives in the root **[README.md → Model evaluation](../README.md#model-evaluation)**.
 
 ---
 
-## Table of contents
+## Why This Eval Framework Exists
+
+The agentic RAG stack makes three decisions on every run: (1) does this user's guardrail state allow outreach, (2) which products does vector retrieval surface, and (3) does the LLM agent respect suppression rules when composing a campaign. Each of these can fail silently — the agent produces a response that looks reasonable but recommends suppressed product types or ignores consent flags.
+
+This framework makes those failures visible and reproducible. Phase 1 evaluates the deterministic layers (guardrails and retrieval) without any LLM cost. Phase 2 evaluates the full agent path with classification factors that let you compare LLM behavior across `temperature`, `top_p`, and `top_k` combinations on a stable golden dataset.
+
+---
+
+## Key Decisions & Trade-offs
+
+| Decision | Why | Trade-off accepted |
+|---|---|---|
+| **Two-phase structure (deterministic first, LLM second)** | Guardrails and retrieval failures don't need an LLM to detect; phase 1 catches ~80% of issues at zero OpenAI cost | Phase 1 and phase 2 reports must be joined manually on `factor_id` |
+| **JSONL golden dataset (not a database)** | Version-controlled, diffable, portable — no additional infra required for the eval layer | Cases must be manually extended; no auto-generation of new scenarios |
+| **`factor_id` as the join key across phases** | Allows direct comparison of retrieval behavior vs. agent behavior at identical hyperparameters | `factor_id` string must be stable across refactors; changing format breaks historical joins |
+| **`top_k` active in phase 1, temp/top_p recorded only** | Retrieval quality varies with `top_k`; temperature has no effect on deterministic ANN search — recording it aligns reports without pretending it does something it doesn't | Might confuse readers who expect all three factors to be active in phase 1 |
+| **`--demo` flag for phase 2 without OpenAI** | Makes CI and local eval possible without billing or quota; deterministic agent path produces comparable structural assertions | `--demo` skips LLM reasoning; genuine policy failures in the LLM path require a full run |
+| **Exit code 0 = all assertions passed** | Integrates cleanly into Jenkins/GHA pipelines as a quality gate | Binary pass/fail; partial-pass detail requires reading the JSON report |
+
+---
+
+## Table of Contents
 
 1. [Concepts](#concepts)
-2. [Prerequisites (one-time setup)](#prerequisites-one-time-setup)
+2. [Prerequisites — one-time setup](#prerequisites--one-time-setup)
 3. [Golden dataset — create and extend](#golden-dataset--create-and-extend)
-4. [Classification factors — temperature, top_p, top_k](#classification-factors--temperature-top_p-top_k)
+4. [Classification factors](#classification-factors)
 5. [Phase 1 — retrieval + guardrails](#phase-1--retrieval--guardrails)
 6. [Phase 2 — LLM agent](#phase-2--llm-agent)
 7. [Reports and interpretation](#reports-and-interpretation)
@@ -22,45 +43,45 @@ Canonical copy also lives in the root **[README.md — Model evaluation](../READ
 
 ## Concepts
 
-### Two meanings of “golden”
+### Two meanings of "golden"
 
 | Term | What it is | Where |
-|------|------------|--------|
-| **CDP golden record** | Runtime stitch of profile + behavior for RAG | `cdp_pipeline.stitch_golden_record()` |
-| **Eval golden dataset** | Fixed test cases with expected outcomes | `eval/golden/*.jsonl` |
+|------|------------|-------|
+| **CDP golden record** | Runtime stitch of profile + behavior for RAG — used live in Tab 8 | `cdp_pipeline.stitch_golden_record()` |
+| **Eval golden dataset** | Version-controlled JSONL test cases with expected outcomes — used for regression eval | `eval/golden/*.jsonl` |
 
-Eval golden cases are version-controlled fixtures; CDP golden records are live database reads.
+These are intentionally separate. CDP golden records are live database reads that change as behavior is logged. Eval golden cases are fixed fixtures that should only change when you deliberately extend the test suite.
 
-### What we evaluate
+### What each phase evaluates
 
 | Layer | Phase | Module | Needs OpenAI |
-|-------|-------|--------|--------------|
+|-------|-------|--------|-------------|
 | Guardrails | 1 | `martech_agent.evaluate_guardrails` | No |
 | Vector retrieval | 1 | `martech_agent.search_inventory` | No |
-| LLM agent policy | 2 | `martech_agent.execute_autonomous_campaign` | Yes |
+| LLM agent policy | 2 (full) | `martech_agent.execute_autonomous_campaign` | **Yes** |
 | Agent (deterministic) | 2 `--demo` | `execute_autonomous_campaign_demo` | No |
 
 ### Classification factors
 
-Hyperparameters treated as **experiment dimensions**. Every result row includes a `factor_id` so you can compare runs:
+Three hyperparameters treated as **experiment dimensions**. Every result row stores a `factor_id` so runs are comparable:
 
 ```
 top_k=8|temp=0.1|top_p=0.9
 ```
 
-| Factor | Phase 1 | Phase 2 |
-|--------|---------|---------|
-| **top_k** | Active → `semantic_product_search(match_count)` | Active → `CDP_MATCH_COUNT` env during agent tool calls |
-| **temperature** | Recorded on report | Active → `ChatOpenAI(temperature=...)` |
-| **top_p** | Recorded on report | Active → `ChatOpenAI(model_kwargs={"top_p": ...})` |
+| Factor | Phase 1 effect | Phase 2 effect |
+|--------|---------------|----------------|
+| **`top_k`** | **Active** — controls `semantic_product_search(match_count)` | **Active** — sets `CDP_MATCH_COUNT` env for agent tool calls |
+| **`temperature`** | Recorded on report only (retrieval is deterministic) | **Active** — passed to `ChatOpenAI(temperature=...)` |
+| **`top_p`** | Recorded on report only | **Active** — passed to `ChatOpenAI(model_kwargs={"top_p": ...})` |
 
 ---
 
-## Prerequisites (one-time setup)
+## Prerequisites — One-Time Setup
 
-Complete these before any eval run.
+Complete all five steps before running any eval.
 
-### Step A — CDP Python environment
+### A — CDP Python environment
 
 ```powershell
 cd c:\Users\agarw\adtech-platform\blank-app
@@ -69,74 +90,79 @@ cd c:\Users\agarw\adtech-platform\blank-app
 pip install -r requirements-cdp.txt -r requirements-agent.txt
 ```
 
-Use **Python 3.11 or 3.12** in `.venv-cdp` (not 3.14).
+Use **Python 3.11 or 3.12** in `.venv-cdp`. Python 3.14 is not supported for the CDP stack.
 
-### Step B — Environment variables
+### B — Environment variables
 
 Copy `.env.example` → `.env`:
 
 | Variable | Required for | Example |
-|----------|--------------|---------|
+|----------|-------------|---------|
 | `SUPABASE_URL` | Phase 1 & 2 | `https://<ref>.supabase.co` |
 | `SUPABASE_KEY` | Phase 1 & 2 | anon JWT `eyJ...` |
-| `OPENAI_API_KEY` | Phase 2 LLM only | `sk-...` |
+| `OPENAI_API_KEY` | Phase 2 full LLM only | `sk-...` |
 | `OPENAI_MODEL` | Phase 2 (optional) | `gpt-4o-mini` |
-| `OPENAI_TEMPERATURE` | Default LLM temp | `0.1` |
+| `OPENAI_TEMPERATURE` | Default LLM temperature | `0.1` |
 | `EVAL_TOP_K` | Factor sweep via env | `3,5,8` |
 | `EVAL_TEMPERATURE` | Factor sweep via env | `0,0.1,0.3` |
 | `EVAL_TOP_P` | Factor sweep via env | `0.9,1.0` |
 
-### Step C — Supabase schema
+### C — Supabase schema
 
-1. Open Supabase → **SQL Editor**.
-2. Run `supabase/migrations/20260518120000_cdp_stitched_schema.sql`.
-3. Run `supabase/seed_demo.sql` (creates `USER_7721`, `ACC-004`, behavioral views).
+1. Open Supabase → **SQL Editor**
+2. Run `supabase/migrations/20260518120000_cdp_stitched_schema.sql`
+3. Run `supabase/seed_demo.sql` — creates `USER_7721`, product `ACC-004`, and behavioral view events
 
-### Step D — Product embeddings
+### D — Product embeddings
 
 ```powershell
 .\.venv-cdp\Scripts\python.exe scripts\backfill_product_embeddings.py
 ```
 
-Expect: `Embedded: ACC-004` (and other SKUs).
+Expected output: `Embedded: ACC-004` (and any other SKUs without vectors).
 
-### Step E — Smoke test
+### E — Smoke test
 
 ```powershell
 .\.venv-cdp\Scripts\python.exe -c "from martech_agent import evaluate_guardrails; print(evaluate_guardrails('USER_7721'))"
 ```
 
-Expect: `shoe_promotions_suppressed: True`, not `No consumer found`.
+Expected output: `shoe_promotions_suppressed: True`. If you see `No consumer found`, step C is incomplete.
 
 ---
 
-## Golden dataset — create and extend
+## Golden Dataset — Create and Extend
 
-### Step 1 — Understand case format
+### The canonical demo persona
 
-Golden cases are **JSON Lines** (one JSON object per line, no array wrapper).
+All reference cases are built around the same seed scenario. Understanding it first makes every field in the case format self-explanatory.
 
-**Phase 1 file:** `eval/golden/cases.jsonl`  
-**Phase 2 file:** `eval/golden/agent_cases.jsonl`
+| Attribute | Value |
+|-----------|-------|
+| **User** | `USER_7721` — High-Value Runner |
+| **Interests** | Marathon Training, Trail Running |
+| **Guardrail** | Shoe purchase 14 days ago → `shoe_promotions_suppressed = true` |
+| **Behavior** | 3× views on `AeroGlow Shoes` in `behavioral_logs` |
+| **Expected retrieval target** | `ACC-004` — HydroStream 2L Hydration Vest |
+| **Expected exclusion** | Any `product_type = Footwear` |
+| **SQL source** | `supabase/seed_demo.sql` |
 
-### Step 2 — Start from the canonical demo persona
+### Case format
 
-Seed data defines the reference scenario:
+Golden cases are **JSON Lines** — one JSON object per line, no array wrapper.
 
-- **User:** `USER_7721` — High-Value Runner, shoe purchase 14 days ago.
-- **Behavior:** 3× views on `AeroGlow Shoes`.
-- **Expected retrieval:** `ACC-004` (HydroStream hydration vest), not `Footwear`.
-- **SQL source:** `supabase/seed_demo.sql`.
+- **Phase 1 file:** `eval/golden/cases.jsonl`
+- **Phase 2 file:** `eval/golden/agent_cases.jsonl`
 
-### Step 3 — Add a guardrails-only case
+### Guardrails-only case (no `search_query`)
 
-No `search_query` → runs guardrails suite only.
+Runs the guardrails suite only. Use when you want to assert suppression state without testing retrieval.
 
 ```json
 {
   "id": "user_7721_guardrails_shoe_suppressed",
   "user_id": "USER_7721",
-  "description": "Shoe purchase 14d ago → footwear promos suppressed",
+  "description": "Shoe purchase 14d ago — footwear promos suppressed",
   "expect_guardrails": {
     "shoe_promotions_suppressed": true,
     "footwear_promotions_allowed": false,
@@ -146,9 +172,9 @@ No `search_query` → runs guardrails suite only.
 }
 ```
 
-### Step 4 — Add a retrieval case
+### Positive retrieval case (include `search_query`)
 
-Include `search_query` → runs retrieval + optional guardrail checks.
+Runs guardrails + vector retrieval. Use when you want to assert that the right SKU appears in the top-k results.
 
 ```json
 {
@@ -162,9 +188,9 @@ Include `search_query` → runs retrieval + optional guardrail checks.
 }
 ```
 
-### Step 5 — Add a negative retrieval case
+### Negative retrieval case
 
-Same user, shoe-intent query — footwear must not appear in top_k when suppressed.
+Same user, shoe-intent query. When suppression is active, footwear must not appear in top-k — even if the query is about shoes.
 
 ```json
 {
@@ -177,7 +203,9 @@ Same user, shoe-intent query — footwear must not appear in top_k when suppress
 }
 ```
 
-### Step 6 — Add an agent case (phase 2)
+### Agent case (phase 2 only)
+
+Tests the full agent policy: does the LLM follow the guardrail and pivot to the correct product category?
 
 ```json
 {
@@ -191,23 +219,23 @@ Same user, shoe-intent query — footwear must not appear in top_k when suppress
 }
 ```
 
-### Step 7 — Golden case field reference
+### Field reference
 
 | Field | Suite | Description |
 |-------|-------|-------------|
-| `id` | All | Unique case name |
-| `user_id` | All | `consumers.external_id` |
-| `description` | Optional | Human note (ignored by runner) |
-| `search_query` | Retrieval | If set, case runs retrieval suite |
-| `expect_guardrails` | Guardrails / retrieval / agent | Key-value equality on `evaluate_guardrails()` |
+| `id` | All | Unique case identifier |
+| `user_id` | All | `consumers.external_id` in Supabase |
+| `description` | Optional | Human note — ignored by runner |
+| `search_query` | Retrieval | Presence triggers retrieval suite |
+| `expect_guardrails` | All | Key-value equality checks on `evaluate_guardrails()` |
 | `expect_skus_in_top_k` | Retrieval | SKU must appear in first `top_k` results |
-| `forbid_product_types_in_top_k` | Retrieval | e.g. `Footwear` must not appear in top_k |
-| `trigger` | Agent | Prompt passed to agent |
-| `forbid_terms_in_outcome` | Agent | Substrings that must not appear in report |
-| `expect_skus_in_outcome` | Agent | SKU must appear in final markdown report |
-| `tags` | Optional | Filtering / documentation |
+| `forbid_product_types_in_top_k` | Retrieval | Product type (e.g. `Footwear`) must not appear in top_k |
+| `trigger` | Agent | Prompt string passed to the agent |
+| `forbid_terms_in_outcome` | Agent | Substrings that must not appear in the agent's markdown report |
+| `expect_skus_in_outcome` | Agent | SKU that must appear in the agent's markdown report |
+| `tags` | Optional | For filtering and documentation |
 
-### Step 8 — Validate new cases
+### Validate new cases
 
 ```powershell
 python eval/run_retrieval_guardrails.py --golden eval/golden/cases.jsonl --top-k 8
@@ -216,11 +244,9 @@ python eval/run_agent.py --demo --top-k 8
 
 ---
 
-## Classification factors — temperature, top_p, top_k
+## Classification Factors
 
-### Step 1 — Define the factor model (implemented)
-
-File: `eval/classification_factors.py`
+### Factor model (`eval/classification_factors.py`)
 
 ```python
 @dataclass(frozen=True)
@@ -230,14 +256,12 @@ class ClassificationFactors:
     top_p: float | None = None
 ```
 
-- `factor_id` — stable grouping key for reports.
-- `retrieval_kwargs()` → `{"match_count": top_k}`.
-- `llm_kwargs()` → `{"temperature": ..., "top_p": ...}` when set.
-- `full_classification_grid(top_k_values, temperatures, top_p_values)` — Cartesian product.
+- `factor_id` — stable string key for joining reports: `top_k=8|temp=0.1|top_p=0.9`
+- `retrieval_kwargs()` → `{"match_count": top_k}`
+- `llm_kwargs()` → `{"temperature": ..., "top_p": ...}` when set
+- `full_classification_grid(top_k_values, temperatures, top_p_values)` — Cartesian product of all combinations
 
-### Step 2 — Attach factors to every eval row (implemented)
-
-Each result in `artifacts/eval_runs/*.json` includes:
+### What each result row stores
 
 ```json
 {
@@ -248,40 +272,19 @@ Each result in `artifacts/eval_runs/*.json` includes:
 }
 ```
 
-### Step 3 — Wire top_k into retrieval (implemented)
+### Running factor sweeps
 
-`martech_agent.search_inventory(..., match_count=factors.top_k)` → `semantic_product_search`.
-
-Assertions in `eval/metrics.py` slice results to `products[:top_k]`.
-
-### Step 4 — Record temperature and top_p in phase 1 (implemented)
-
-Phase 1 does not change retrieval when you sweep temp/top_p — they are stored so reports align with phase 2 runs using the same grid.
+**From the CLI:**
 
 ```powershell
+# Phase 1 — sweep top_k; temp and top_p recorded
 python eval/run_retrieval_guardrails.py --top-k 3,5,8 --temperature 0,0.1 --top-p 0.9,1.0
-```
 
-### Step 5 — Activate temperature and top_p in phase 2 (implemented)
-
-`martech_agent._build_llm(temperature=..., top_p=...)` and `execute_autonomous_campaign(..., temperature=..., top_p=...)`.
-
-`eval/run_agent.py` loops the factor grid and passes LLM kwargs per combo.
-
-### Step 6 — Wire top_k for agent tool retrieval (implemented)
-
-`eval/run_agent.py` sets `CDP_MATCH_COUNT=<top_k>` for each factor combo before invoking the agent (tools read this in `cdp_pipeline.semantic_product_search`).
-
-### Step 7 — Sweep factors from CLI or environment
-
-**CLI:**
-
-```powershell
-python eval/run_retrieval_guardrails.py --top-k 3,5,8 --temperature 0,0.1 --top-p 0.9,1.0
+# Phase 2 — all three factors active
 python eval/run_agent.py --top-k 8 --temperature 0,0.1 --top-p 0.95,1.0
 ```
 
-**Environment:**
+**From environment variables:**
 
 ```powershell
 $env:EVAL_TOP_K = "5,8"
@@ -290,28 +293,33 @@ $env:EVAL_TOP_P = "0.95,1.0"
 python eval/run_retrieval_guardrails.py --use-env-grid
 ```
 
-### Step 8 — Join phase 1 and phase 2 reports
+### Joining phase 1 and phase 2 reports
 
-Use the same `factor_id` string in both `phase1_*.json` and `phase2_*.json` to compare retrieval vs agent behavior at identical hyperparameters.
+Use `factor_id` as the join key. A phase 1 report and a phase 2 report with the same `factor_id` were evaluated at identical hyperparameter settings — compare retrieval precision against agent policy compliance at each point in the grid.
 
 ---
 
-## Phase 1 — retrieval + guardrails
+## Phase 1 — Retrieval + Guardrails
 
 ### What runs
 
-For each **golden case** × **classification factor combo**:
+For each golden case × each factor combination:
 
-1. **Guardrails suite** (no `search_query`): `evaluate_guardrails(user_id)` vs `expect_guardrails`.
-2. **Retrieval suite** (has `search_query`): guardrails + `search_inventory(query, match_count=top_k)` vs SKU/type assertions.
+- **Guardrails suite** (no `search_query`): calls `evaluate_guardrails(user_id)` and asserts against `expect_guardrails`
+- **Retrieval suite** (has `search_query`): runs guardrails first, then `search_inventory(query, match_count=top_k)` and asserts SKU presence and product type exclusions
 
 ### Commands
 
 ```powershell
 .\.venv-cdp\Scripts\Activate.ps1
+
+# Default run
 .\scripts\run-model-eval.ps1
-# equivalent:
+
+# Equivalent direct call
 python eval/run_retrieval_guardrails.py
+
+# With factor sweep
 python eval/run_retrieval_guardrails.py --top-k 3,5,8
 ```
 
@@ -319,73 +327,72 @@ python eval/run_retrieval_guardrails.py --top-k 3,5,8
 
 `artifacts/eval_runs/phase1_<timestamp>.json`
 
-Exit code `0` = all assertions passed, no errors.
+Exit code `0` = all assertions passed. Exit code non-zero = at least one assertion failed — read the report for detail.
 
-### Implementation files
+### Implementation
 
 | File | Role |
 |------|------|
-| `eval/run_retrieval_guardrails.py` | CLI entry |
-| `eval/runner.py` | Orchestration |
-| `eval/metrics.py` | Assertions |
-| `eval/golden/cases.jsonl` | Golden labels |
+| `eval/run_retrieval_guardrails.py` | CLI entry point |
+| `eval/runner.py` | Orchestration and factor loop |
+| `eval/metrics.py` | Assertion helpers |
+| `eval/golden/cases.jsonl` | Golden test cases |
 
 ---
 
-## Phase 2 — LLM agent
+## Phase 2 — LLM Agent
 
 ### What runs
 
-For each **agent golden case** × **factor combo**:
+For each agent golden case × each factor combination:
 
-1. Set `CDP_MATCH_COUNT` from `top_k`.
-2. Call agent with `temperature` / `top_p` (or `--demo` for deterministic path without OpenAI).
-3. Assert guardrails + outcome text (forbidden terms, expected SKUs).
+1. Sets `CDP_MATCH_COUNT` from `top_k`
+2. Invokes the agent with the `trigger` prompt, passing `temperature` / `top_p` (or uses the deterministic demo path with `--demo`)
+3. Asserts guardrail state, forbidden terms, and expected SKUs against the agent's markdown report
 
 ### Commands
 
-**Deterministic (no OpenAI quota):**
+**Deterministic — no OpenAI quota required:**
 
 ```powershell
 python eval/run_agent.py --demo --top-k 8
 ```
 
-**Full LLM:**
+**Full LLM — requires `OPENAI_API_KEY` in `.env`:**
 
 ```powershell
-# Requires OPENAI_API_KEY in .env
 python eval/run_agent.py --top-k 8 --temperature 0.1 --top-p 1.0
 ```
 
 ### Output
 
-`artifacts/eval_runs/phase2_demo_<timestamp>.json` or `phase2_llm_<timestamp>.json`
+- `artifacts/eval_runs/phase2_demo_<timestamp>.json` (demo path)
+- `artifacts/eval_runs/phase2_llm_<timestamp>.json` (full LLM path)
 
-### Implementation files
+### Implementation
 
 | File | Role |
 |------|------|
-| `eval/run_agent.py` | CLI + factor loop |
+| `eval/run_agent.py` | CLI entry point + factor loop |
 | `eval/golden/agent_cases.jsonl` | Agent golden cases |
-| `martech_agent.py` | `_build_llm`, `execute_autonomous_campaign` overrides |
+| `martech_agent.py` | `_build_llm`, `execute_autonomous_campaign`, `execute_autonomous_campaign_demo` |
 
 ---
 
-## Reports and interpretation
+## Reports and Interpretation
 
 ### Top-level fields
 
 | Field | Meaning |
 |-------|---------|
 | `eval_phase` | `1-retrieval-guardrails` or `2-llm-agent` |
-| `classification_factor_combos` | Number of factor grid points |
-| `factor_ids` | List of unique `factor_id` values |
-| `overall.success` | All assertions passed |
+| `classification_factor_combos` | Number of factor grid points evaluated |
+| `factor_ids` | List of unique `factor_id` strings in this report |
+| `overall.success` | `true` if all assertions passed across all case-runs |
 | `results[].summary` | Per case-run pass/fail counts |
-
-### Example: pivot by factor
-
-Filter `results` where `factor_id == "top_k=5|temp=na|top_p=na"` and inspect `assertions` for failures.
+| `results[].assertions` | Individual assertion results |
+| `results[].retrieved_skus` | Phase 1 — actual retrieval slice for that `top_k` |
+| `errors` | Exceptions during the run (e.g. missing Supabase seed) |
 
 ### Artifacts layout
 
@@ -395,9 +402,17 @@ artifacts/
     phase1_20260527T165620Z.json
     phase2_demo_20260527T170000Z.json
     phase2_llm_20260527T170500Z.json
-  campaign_runs/          # agent markdown reports
-  notification_queue/     # queued push JSON
+  campaign_runs/          ← agent markdown reports
+  notification_queue/     ← queued push JSON
 ```
+
+### How to read a failure
+
+1. Open the phase 1 or phase 2 JSON report
+2. Filter `results` by the `factor_id` you care about
+3. Look at `results[].assertions` — each entry has `passed`, `assertion_type`, and `detail`
+4. Cross-reference `retrieved_skus` (phase 1) or the agent markdown (phase 2) against the golden case `expect_*` fields
+5. Common root causes: missing seed data, un-embedded SKUs, or `top_k` too low for the search query
 
 ---
 
@@ -406,24 +421,27 @@ artifacts/
 | Symptom | Fix |
 |---------|-----|
 | `No consumer found for USER_7721` | Run `supabase/seed_demo.sql` |
-| Vector search `[]` | Run `backfill_product_embeddings.py` |
-| `consumers` table not found | Run migration SQL |
-| Phase 1 passes guardrails but fails SKU | Confirm `ACC-004` embedded; lower `--top-k` or improve query |
-| Phase 2 OpenAI 429 | Use `python eval/run_agent.py --demo` |
-| `Python 3.14 is not supported` | Use `.venv-cdp` (3.12) |
-| Assertions 0/0 | Case missing `expect_*` fields |
+| Vector search returns `[]` | Run `scripts/backfill_product_embeddings.py` |
+| `consumers` table not found | Run migration SQL in Supabase SQL Editor |
+| Phase 1 guardrails pass but SKU assertion fails | Confirm `ACC-004` is embedded; try widening `--top-k` or refining `search_query` in the case |
+| Phase 2 OpenAI 429 / quota exceeded | Use `python eval/run_agent.py --demo` |
+| `Python 3.14 is not supported` | Activate `.venv-cdp` (Python 3.12) before running |
+| Assertions show `0/0` (no checks ran) | Case is missing all `expect_*` fields — add at least one assertion field |
+| `factor_id` mismatch between phase 1 and phase 2 | Ensure `--top-k`, `--temperature`, and `--top-p` arguments are identical across both runs |
 
 ---
 
-## Module reference
+## Module Reference
 
 | Path | Purpose |
 |------|---------|
-| `eval/classification_factors.py` | Factor schema, grids, env parsing |
-| `eval/golden/cases.jsonl` | Phase 1 golden cases |
-| `eval/golden/agent_cases.jsonl` | Phase 2 golden cases |
-| `eval/metrics.py` | Assertion helpers |
-| `eval/runner.py` | Phase 1 orchestration |
-| `eval/run_retrieval_guardrails.py` | Phase 1 CLI |
-| `eval/run_agent.py` | Phase 2 CLI |
-| `scripts/run-model-eval.ps1` | Phase 1 PowerShell wrapper |
+| `eval/classification_factors.py` | Factor schema, Cartesian grid, env parsing, `factor_id` generation |
+| `eval/golden/cases.jsonl` | Phase 1 golden cases (guardrails + retrieval) |
+| `eval/golden/agent_cases.jsonl` | Phase 2 golden cases (agent triggers + outcome checks) |
+| `eval/metrics.py` | Assertion helpers for guardrails, SKUs, product types, and outcome terms |
+| `eval/runner.py` | Phase 1 orchestration — case loop × factor loop |
+| `eval/run_retrieval_guardrails.py` | Phase 1 CLI entry point |
+| `eval/run_agent.py` | Phase 2 CLI entry point + factor loop |
+| `scripts/run-model-eval.ps1` | Phase 1 PowerShell wrapper for pre-demo and CI use |
+| `martech_agent.py` | `evaluate_guardrails`, `search_inventory`, `execute_autonomous_campaign`, `_build_llm` |
+| `cdp_pipeline.py` | `semantic_product_search` — reads `CDP_MATCH_COUNT` env |
