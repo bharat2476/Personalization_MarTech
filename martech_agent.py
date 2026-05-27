@@ -101,11 +101,17 @@ def get_customer_profile(user_id: str) -> dict[str, Any]:
         raise MarTechAgentError(f"get_customer_profile failed: {exc}") from exc
 
 
-def search_inventory(query: str, user_id: str | None = None) -> list[dict[str, Any]]:
+def search_inventory(
+    query: str,
+    user_id: str | None = None,
+    *,
+    match_count: int | None = None,
+) -> list[dict[str, Any]]:
     """
     Semantic vector search over Supabase `products` via match_products RPC.
 
     When user_id is provided, footwear is excluded if shoe suppression is active.
+    match_count maps to eval classification factor top_k when set.
     """
     exclude_footwear = False
     if user_id:
@@ -119,6 +125,7 @@ def search_inventory(query: str, user_id: str | None = None) -> list[dict[str, A
         return semantic_product_search(
             query.strip(),
             exclude_footwear=exclude_footwear,
+            match_count=match_count,
         )
     except CDPPipelineError as exc:
         raise MarTechAgentError(f"search_inventory failed: {exc}") from exc
@@ -273,20 +280,42 @@ MARTECH_TOOLS = [
 ]
 
 
-def _build_llm() -> ChatOpenAI:
+def _build_llm(
+    *,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    model: str | None = None,
+) -> ChatOpenAI:
+    """Build ChatOpenAI; optional overrides support model-eval classification factor sweeps."""
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise MarTechAgentError(
             "OPENAI_API_KEY is not set. Add it to .env or your environment."
         )
-    model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
-    temperature = float(os.environ.get("OPENAI_TEMPERATURE", "0.1"))
-    return ChatOpenAI(model=model, temperature=temperature, api_key=api_key)
+    resolved_model = model or os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+    resolved_temp = (
+        temperature
+        if temperature is not None
+        else float(os.environ.get("OPENAI_TEMPERATURE", "0.1"))
+    )
+    kwargs: dict[str, Any] = {
+        "model": resolved_model,
+        "temperature": resolved_temp,
+        "api_key": api_key,
+    }
+    if top_p is not None:
+        kwargs["model_kwargs"] = {"top_p": top_p}
+    return ChatOpenAI(**kwargs)
 
 
-def _build_agent():
+def _build_agent(
+    *,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    model: str | None = None,
+):
     """LangGraph ReAct agent with OpenAI tool-calling bound to MARTECH_TOOLS."""
-    llm = _build_llm()
+    llm = _build_llm(temperature=temperature, top_p=top_p, model=model)
     return create_react_agent(
         llm,
         MARTECH_TOOLS,
@@ -442,9 +471,18 @@ def execute_autonomous_campaign_demo(user_id: str, trigger_event_summary: str) -
     return report
 
 
-def execute_autonomous_campaign(user_id: str, trigger_event_summary: str) -> str:
+def execute_autonomous_campaign(
+    user_id: str,
+    trigger_event_summary: str,
+    *,
+    temperature: float | None = None,
+    top_p: float | None = None,
+    model: str | None = None,
+) -> str:
     """
     Execute the autonomous MarTech agent loop.
+
+    Optional temperature / top_p / model override eval classification factors (phase 2).
 
     Returns:
         Markdown report with step-by-step reasoning chain and final campaign outcome.
@@ -467,7 +505,7 @@ def execute_autonomous_campaign(user_id: str, trigger_event_summary: str) -> str
     )
 
     try:
-        agent = _build_agent()
+        agent = _build_agent(temperature=temperature, top_p=top_p, model=model)
         result = agent.invoke({"messages": [HumanMessage(content=user_task)]})
         messages = result.get("messages", [])
         reasoning = _format_reasoning_chain(messages)

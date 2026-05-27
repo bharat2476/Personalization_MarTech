@@ -34,8 +34,19 @@ Set `SUPABASE_URL` and `SUPABASE_KEY`, then use `requirements-cdp.txt` in that v
 
 - The auction module (`auction.py`) has a `KeyError: 'seller_id'` bug when merging DataFrames in `run_auction()`. This causes Tabs 3 (Ads & Auction) and 4 (Metrics Dashboard) to fail at runtime. Tabs 1 (Simulation Config) and 2 (Personalized Results) work correctly.
 
+### Model eval (phase 1)
+
+Retrieval + guardrails against `eval/golden/cases.jsonl` (CDP venv + Supabase required):
+
+```
+.\scripts\run-model-eval.ps1
+# or: .\.venv-cdp\Scripts\python.exe eval/run_retrieval_guardrails.py --top-k 3,5,8
+```
+
+Classification factors: `top_k` (active), `temperature` / `top_p` (recorded; LLM in phase 2). See `eval/README.md`.
+
 ### Lint / Test / Build
 
-- **No automated test suite or linter configuration exists in this repo.** There are no `pytest`, `flake8`, `mypy`, or similar configs.
+- **No pytest suite** — phase-1 eval is `eval/run_retrieval_guardrails.py`.
 - To verify modules load correctly: `python3 -c "import streamlit_app"`
 - The app has no build step — run it directly with `streamlit run`.
