@@ -183,7 +183,7 @@ Core UI logic: `streamlit_app.py`. MarTech signal processing, hybrid ranking, an
 - Explore-vs-exploit ranking for repeat and new customers
 - Lifecycle orchestration for new visitors, first-purchase prospects, repeat runners, lapsed runners, active members, and high-value members
 - Privacy modes: full consent, limited consent, and no app usage data
-- Explainable recommendation labels for interview storytelling
+- Explainable recommendation labels for storytelling
 - Sale and trending product ribbons
 - Dropdown filtering: men, women, kids, footwear, apparel, accessories
 - Shoe email suppression when a member recently purchased footwear
