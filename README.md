@@ -699,7 +699,7 @@ python eval/run_agent.py --top-k 8 --temperature 0.1 --top-p 1.0
 
 ---
 
-## Demo script (5–7 minutes)
+## Demo Script (5–7 minutes)
 
 ### Tab 1 — Member & Strategy
 
