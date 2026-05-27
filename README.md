@@ -203,6 +203,7 @@ Technical reference for engineers, architects, and demo operators. Covers archit
 | CDP + GenAI agent | [Agentic RAG, CDP, and autonomous agent](#agentic-rag-cdp-and-autonomous-agent) |
 | Supabase setup | [Before demo — complete checklist](#before-demo--complete-checklist) |
 | Run locally | [How to run locally](#how-to-run-locally) |
+| Model evaluation | [Model evaluation](#model-evaluation) |
 | Live demo script | [Demo script (5–7 minutes)](#demo-script-57-minutes-and-expected-results) |
 | Scoring formulas | [Scoring logic](#scoring-logic) |
 | Fixes | [Troubleshooting](#troubleshooting) |
@@ -272,6 +273,11 @@ Prefer a plain-language walkthrough? See **[Non Tech Persona →](#non-tech-pers
 | `scripts/pre-demo.ps1` | Pre-demo health checks + checklist |
 | `scripts/setup-cdp-venv.ps1` | Creates `.venv-cdp` (Python 3.12) for CDP/agent deps |
 | `scripts/backfill_product_embeddings.py` | Writes 384-d embeddings to Supabase `products` |
+| `scripts/run-model-eval.ps1` | Phase-1 eval wrapper (retrieval + guardrails) |
+| `eval/` | Model eval: golden dataset, classification factors, phase 1 & 2 runners — see [eval/README.md](eval/README.md) |
+| `eval/golden/cases.jsonl` | Phase-1 golden cases (guardrails + retrieval) |
+| `eval/golden/agent_cases.jsonl` | Phase-2 golden cases (LLM agent) |
+| `eval/classification_factors.py` | `top_k`, `temperature`, `top_p` factor schema and sweeps |
 | `requirements.txt` | Streamlit app only (Python 3.10–3.14) |
 | `requirements-cdp.txt` | Supabase + sentence-transformers |
 | `requirements-agent.txt` | LangChain + LangGraph + OpenAI |
@@ -624,6 +630,201 @@ Artifacts: campaign reports in `artifacts/campaign_runs/`; queued pushes in `art
 
 ---
 
+## Model evaluation
+
+Structured evaluation for the CDP stack: a **versioned golden dataset**, **classification factors** (`top_k`, `temperature`, `top_p`), **phase 1** (deterministic retrieval + guardrails), and **phase 2** (LLM agent or demo agent).
+
+**Extended runbook:** [eval/README.md](eval/README.md) (same steps, troubleshooting, module map).
+
+### Concepts
+
+| Term | Meaning |
+|------|---------|
+| **CDP golden record** | Live stitch of profile + behavior (`cdp_pipeline.stitch_golden_record`) — used at runtime in Tab 8 |
+| **Eval golden dataset** | Fixed JSONL test cases with expected outcomes (`eval/golden/*.jsonl`) — used for regression eval |
+| **Classification factors** | Hyperparameters that label each run: `top_k`, `temperature`, `top_p` |
+| **factor_id** | Stable key, e.g. `top_k=8|temp=0.1|top_p=0.9`, for comparing reports |
+
+```mermaid
+flowchart LR
+  GOLD[eval/golden/*.jsonl]
+  FACT[classification_factors]
+  P1[Phase 1: retrieval + guardrails]
+  P2[Phase 2: LLM agent]
+  RPT[artifacts/eval_runs/*.json]
+  GOLD --> P1
+  GOLD --> P2
+  FACT --> P1
+  FACT --> P2
+  P1 --> RPT
+  P2 --> RPT
+```
+
+### Prerequisites (complete before eval)
+
+| Step | Action | Verify |
+|------|--------|--------|
+| A | `.\scripts\setup-cdp-venv.ps1` | `.venv-cdp\Scripts\python.exe` exists |
+| B | Copy `.env.example` → `.env`; set `SUPABASE_URL`, `SUPABASE_KEY` | `pre-demo.ps1` or manual query succeeds |
+| C | Run `supabase/migrations/20260518120000_cdp_stitched_schema.sql` | `consumers` table exists |
+| D | Run `supabase/seed_demo.sql` | `USER_7721` present |
+| E | `.\.venv-cdp\Scripts\python.exe scripts\backfill_product_embeddings.py` | `Embedded: ACC-004` |
+| F | Phase 2 only: set `OPENAI_API_KEY` | Or use `--demo` to skip LLM |
+
+### Golden dataset — create and extend
+
+Golden cases are **one JSON object per line** (JSONL). Do not wrap in a top-level array.
+
+**Files:**
+
+- `eval/golden/cases.jsonl` — phase 1 (guardrails + retrieval)
+- `eval/golden/agent_cases.jsonl` — phase 2 (agent triggers + outcome checks)
+
+**Reference scenario (from `supabase/seed_demo.sql`):**
+
+- User `USER_7721` — High-Value Runner; shoe purchase **14 days ago** → shoe promos suppressed.
+- Behavior: 3× views on `AeroGlow Shoes`.
+- Expected product: **`ACC-004`** (HydroStream hydration vest), not `Footwear`.
+
+**Step 1 — Add a guardrails case** (no `search_query`):
+
+```json
+{"id": "user_7721_guardrails_shoe_suppressed", "user_id": "USER_7721", "expect_guardrails": {"shoe_promotions_suppressed": true, "footwear_promotions_allowed": false, "outreach_allowed": true}}
+```
+
+**Step 2 — Add a retrieval case** (include `search_query`):
+
+```json
+{"id": "user_7721_retrieval_hydration", "user_id": "USER_7721", "search_query": "hydration vest marathon trail running accessories", "expect_guardrails": {"shoe_promotions_suppressed": true}, "expect_skus_in_top_k": ["ACC-004"], "forbid_product_types_in_top_k": ["Footwear"]}
+```
+
+**Step 3 — Add a negative retrieval case** (shoe query must not return Footwear in top_k):
+
+```json
+{"id": "user_7721_retrieval_footwear_blocked", "user_id": "USER_7721", "search_query": "running shoes marathon", "expect_guardrails": {"shoe_promotions_suppressed": true}, "forbid_product_types_in_top_k": ["Footwear"]}
+```
+
+**Step 4 — Add an agent case** (`eval/golden/agent_cases.jsonl`):
+
+```json
+{"id": "agent_user_7721_hydration_campaign", "user_id": "USER_7721", "trigger": "USER_7721 viewed AeroGlow Shoes 3x. Shoe purchase 14 days ago. Hydration campaign — no footwear promos.", "expect_guardrails": {"shoe_promotions_suppressed": true}, "forbid_terms_in_outcome": ["shoe", "sneaker", "footwear"], "expect_skus_in_outcome": ["ACC-004"]}
+```
+
+**Golden field reference:**
+
+| Field | Phase | Purpose |
+|-------|-------|---------|
+| `user_id` | 1, 2 | `consumers.external_id` |
+| `search_query` | 1 | If set → retrieval suite |
+| `expect_guardrails` | 1, 2 | Equality checks on `evaluate_guardrails()` |
+| `expect_skus_in_top_k` | 1 | SKU in first `top_k` vector hits |
+| `forbid_product_types_in_top_k` | 1 | e.g. `Footwear` absent from top_k |
+| `trigger` | 2 | Agent task prompt |
+| `forbid_terms_in_outcome` | 2 | Substrings must not appear in report |
+| `expect_skus_in_outcome` | 2 | SKU must appear in agent markdown |
+
+### Classification factors — temperature, top_p, top_k
+
+Three factors partition experiment results. Every eval row stores `classification_factors` and `factor_id`.
+
+| Factor | Phase 1 | Phase 2 |
+|--------|---------|---------|
+| **top_k** | **Active** — `search_inventory(..., match_count=top_k)` | **Active** — `CDP_MATCH_COUNT` env during agent runs |
+| **temperature** | Recorded (retrieval unchanged) | **Active** — `ChatOpenAI(temperature=...)` |
+| **top_p** | Recorded (retrieval unchanged) | **Active** — `ChatOpenAI(model_kwargs={"top_p": ...})` |
+
+**Step 1 — Factor model** (`eval/classification_factors.py`): `ClassificationFactors`, `full_classification_grid()`, `iter_factor_grid_from_env()`.
+
+**Step 2 — Attach to each result** (`eval/runner.py`, `eval/run_agent.py`): every row includes `factor_id` and applied kwargs.
+
+**Step 3 — Wire top_k (phase 1):** `martech_agent.search_inventory` → `semantic_product_search(match_count=top_k)`; assertions slice to `products[:top_k]`.
+
+**Step 4 — Record temperature / top_p in phase 1:** sweep and store on report for alignment with phase 2; retrieval scores do not change until LLM runs.
+
+**Step 5 — Activate temperature / top_p (phase 2):** `martech_agent._build_llm(temperature=..., top_p=...)` and `execute_autonomous_campaign(..., temperature=..., top_p=...)`.
+
+**Step 6 — Wire top_k (phase 2):** `eval/run_agent.py` sets `CDP_MATCH_COUNT=<top_k>` per factor combo.
+
+**Step 7 — Sweep from CLI:**
+
+```powershell
+python eval/run_retrieval_guardrails.py --top-k 3,5,8 --temperature 0,0.1,0.3 --top-p 0.9,1.0
+python eval/run_agent.py --top-k 8 --temperature 0,0.1 --top-p 0.95,1.0
+```
+
+**Step 8 — Sweep from environment** (with `--use-env-grid` on phase 1):
+
+```powershell
+$env:EVAL_TOP_K = "5,8"
+$env:EVAL_TEMPERATURE = "0.1"
+$env:EVAL_TOP_P = "0.95,1.0"
+python eval/run_retrieval_guardrails.py --use-env-grid
+```
+
+Optional defaults in `.env.example`: `EVAL_TOP_K`, `EVAL_TEMPERATURE`, `EVAL_TOP_P`.
+
+### Phase 1 — retrieval + guardrails (no OpenAI)
+
+Runs each golden case × each factor combination:
+
+1. **Guardrails** — `evaluate_guardrails(user_id)` vs `expect_guardrails`.
+2. **Retrieval** — `search_inventory` with `match_count=top_k`; check SKUs and forbidden `product_type`.
+
+```powershell
+cd c:\Users\agarw\adtech-platform\blank-app
+.\.venv-cdp\Scripts\Activate.ps1
+.\scripts\run-model-eval.ps1
+# or:
+python eval/run_retrieval_guardrails.py
+python eval/run_retrieval_guardrails.py --top-k 3,5,8
+```
+
+**Output:** `artifacts/eval_runs/phase1_<timestamp>.json`  
+**Exit code 0:** all assertions passed.
+
+### Phase 2 — LLM agent
+
+Runs `eval/golden/agent_cases.jsonl` with the same factor grid.
+
+**Deterministic (no OpenAI):**
+
+```powershell
+python eval/run_agent.py --demo --top-k 8
+```
+
+**Full LLM** (requires `OPENAI_API_KEY`):
+
+```powershell
+python eval/run_agent.py --top-k 8 --temperature 0.1 --top-p 1.0
+```
+
+**Output:** `artifacts/eval_runs/phase2_demo_<timestamp>.json` or `phase2_llm_<timestamp>.json`
+
+Join phase 1 and phase 2 reports on matching `factor_id`.
+
+### Read eval reports
+
+| JSON path | Meaning |
+|-----------|---------|
+| `overall.success` | All case-runs passed |
+| `factor_ids` | Factor combinations exercised |
+| `results[].factor_id` | Group key for this row |
+| `results[].assertions` | Per-check pass/fail |
+| `results[].retrieved_skus` | Phase-1 retrieval slice |
+| `errors` | Exceptions (e.g. missing Supabase seed) |
+
+### Eval troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `No consumer found for USER_7721` | Run `supabase/seed_demo.sql` |
+| Empty vector search | Run `scripts/backfill_product_embeddings.py` |
+| Phase 1 low pass rate at `top_k=3` | Widen `--top-k` or adjust `search_query` in golden case |
+| OpenAI 429 / quota | `python eval/run_agent.py --demo` |
+| Wrong Python version | Use `.venv-cdp` (3.11/3.12), not 3.14 |
+
+---
+
 ## Demo script (5–7 minutes) and expected results
 
 ### Tab 1 — Member & Strategy
@@ -908,6 +1109,8 @@ After pushing changes to GitHub, Streamlit Community Cloud redeploys from `main`
 | Tab 8 CDP warning on Streamlit 3.14 | Expected; run Tab 1 simulation for fallback, or use CDP venv for CLI tests |
 | Tabs 3–4 auction errors | Known `auction.py` issue — demo Tabs 1, 2, 8 |
 | `.env` not loading OpenAI key | Remove invalid `//` comment lines; use `#` only |
+| Model eval failures for `USER_7721` | Complete [Model evaluation prerequisites](#prerequisites-complete-before-eval); see [eval/README.md](eval/README.md) |
+| Phase 2 eval needs billing | Use `python eval/run_agent.py --demo` |
 
 See also **`PRE_DEMO.md`** for a printable runbook.
 
@@ -916,6 +1119,7 @@ See also **`PRE_DEMO.md`** for a printable runbook.
 ```powershell
 python -c "import streamlit_app"
 .\.venv-cdp\Scripts\python.exe -c "from martech_agent import MARTECH_TOOLS; print(len(MARTECH_TOOLS))"
+.\scripts\run-model-eval.ps1
 ```
 
 ---

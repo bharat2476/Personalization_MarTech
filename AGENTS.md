@@ -34,16 +34,11 @@ Set `SUPABASE_URL` and `SUPABASE_KEY`, then use `requirements-cdp.txt` in that v
 
 - The auction module (`auction.py`) has a `KeyError: 'seller_id'` bug when merging DataFrames in `run_auction()`. This causes Tabs 3 (Ads & Auction) and 4 (Metrics Dashboard) to fail at runtime. Tabs 1 (Simulation Config) and 2 (Personalized Results) work correctly.
 
-### Model eval (phase 1)
+### Model eval
 
-Retrieval + guardrails against `eval/golden/cases.jsonl` (CDP venv + Supabase required):
-
-```
-.\scripts\run-model-eval.ps1
-# or: .\.venv-cdp\Scripts\python.exe eval/run_retrieval_guardrails.py --top-k 3,5,8
-```
-
-Classification factors: `top_k` (active), `temperature` / `top_p` (recorded; LLM in phase 2). See `eval/README.md`.
+Phase 1: `.\scripts\run-model-eval.ps1` — retrieval + guardrails (`eval/golden/cases.jsonl`).  
+Phase 2: `python eval/run_agent.py` (LLM) or `--demo` (no OpenAI).  
+Factors: `top_k`, `temperature`, `top_p`. Full steps: `README.md#model-evaluation` and `eval/README.md`.
 
 ### Lint / Test / Build
 
