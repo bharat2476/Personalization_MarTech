@@ -826,7 +826,7 @@ final_score = (1.80×0.60) + (1.0×0.5) + (1.25×0.40) = 1.08 + 0.50 + 0.50 = 2.
 
 ---
 
-## Interview framing
+## Framing
 
 ### Architecture principles
 
