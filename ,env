@@ -8,7 +8,7 @@ SUPABASE_KEY=sb_publishable_uNdty7IrgmC_SyWUZlm9kg_WilUwsBp
 # CDP_MATCH_COUNT=8
 
 # MarTech agent (martech_agent.py)
-# OPENAI_API_KEY=sk-...
+# OPENAI_API_KEY=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
 # OPENAI_MODEL=gpt-4o-mini
 # OPENAI_TEMPERATURE=0.1
 
