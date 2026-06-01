@@ -32,16 +32,46 @@ def _count(client, table: str, **filters) -> int:
     return int(resp.count or 0)
 
 
+def _key_kind(key: str) -> str:
+    if key.startswith("eyJ"):
+        try:
+            import base64
+            import json
+
+            payload = key.split(".")[1]
+            payload += "=" * (4 - len(payload) % 4)
+            role = json.loads(base64.urlsafe_b64decode(payload)).get("role", "?")
+            return f"jwt ({role})"
+        except Exception:
+            return "jwt (unknown role)"
+    if key.startswith("sb_publishable"):
+        return "publishable (not for local CDP scripts)"
+    if key.startswith("sb_secret"):
+        return "secret"
+    return "unknown"
+
+
 def main() -> None:
     import os
 
     url = os.environ.get("SUPABASE_URL", "").strip()
+    key = os.environ.get("SUPABASE_KEY", "").strip()
     if not url:
         print("SUPABASE_URL is not set. Copy .env.example to .env and fill in values.")
+        sys.exit(1)
+    if not key:
+        print("SUPABASE_KEY is not set.")
         sys.exit(1)
 
     print(f"Supabase project: {_project_ref(url)}")
     print(f"URL: {url}")
+    kind = _key_kind(key)
+    print(f"SUPABASE_KEY: {kind}")
+    if kind != "jwt (service_role)":
+        print(
+            "WARN: Local scripts need service_role (Project Settings -> API). "
+            "Save .env (Ctrl+S) — Python reads the file on disk, not unsaved editor text.\n"
+        )
     print(
         "Tip: SQL Editor must be open on this same project "
         "(Dashboard URL contains the same ref).\n"
