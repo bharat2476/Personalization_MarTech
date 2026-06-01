@@ -99,7 +99,7 @@ Copy `.env.example` → `.env`:
 | Variable | Required for | Example |
 |----------|-------------|---------|
 | `SUPABASE_URL` | Phase 1 & 2 | `https://<ref>.supabase.co` |
-| `SUPABASE_KEY` | Phase 1 & 2 | anon JWT `eyJ...` |
+| `SUPABASE_KEY` | Phase 1 & 2 | **service_role** secret for local scripts (see note below) |
 | `OPENAI_API_KEY` | Phase 2 full LLM only | `sk-...` |
 | `OPENAI_MODEL` | Phase 2 (optional) | `gpt-4o-mini` |
 | `OPENAI_TEMPERATURE` | Default LLM temperature | `0.1` |
@@ -107,13 +107,23 @@ Copy `.env.example` → `.env`:
 | `EVAL_TEMPERATURE` | Factor sweep via env | `0,0.1,0.3` |
 | `EVAL_TOP_P` | Factor sweep via env | `0.9,1.0` |
 
+**`SUPABASE_KEY` for local eval:** Use the **service_role** secret from Supabase → Project Settings → API. The migration grants `SELECT` on `consumers` only to `service_role` / `authenticated`, not the anon key; embedding backfill also needs `UPDATE` on `products`. Never commit service_role to git — keep it in `.env` only.
+
 ### C — Supabase schema
 
 1. Open Supabase → **SQL Editor**
 2. Run `supabase/migrations/20260518120000_cdp_stitched_schema.sql`
 3. Run `supabase/seed_demo.sql` — creates `USER_7721`, product `ACC-004`, and behavioral view events
 
-### D — Product embeddings
+### D — Verify seed (recommended before embeddings)
+
+```powershell
+.\.venv-cdp\Scripts\python.exe scripts\verify_supabase_seed.py
+```
+
+Expected: `products` ≥ 1, `consumers (USER_7721)` = 1. If counts are 0, see [Troubleshooting](#troubleshooting).
+
+### E — Product embeddings
 
 ```powershell
 .\.venv-cdp\Scripts\python.exe scripts\backfill_product_embeddings.py
@@ -121,7 +131,7 @@ Copy `.env.example` → `.env`:
 
 Expected output: `Embedded: ACC-004` (and any other SKUs without vectors).
 
-### E — Smoke test
+### F — Smoke test
 
 ```powershell
 .\.venv-cdp\Scripts\python.exe -c "from martech_agent import evaluate_guardrails; print(evaluate_guardrails('USER_7721'))"
@@ -420,7 +430,8 @@ artifacts/
 
 | Symptom | Fix |
 |---------|-----|
-| `No consumer found for USER_7721` | Run `supabase/seed_demo.sql` |
+| `No products found. Run supabase/seed_demo.sql first` | Run `scripts/verify_supabase_seed.py`. If counts are 0: confirm SQL Editor is on the **same project** as `SUPABASE_URL` in `.env`, re-run migration then `seed_demo.sql` (paste full file — do not run `.sql` paths in PowerShell). Use **service_role** in `SUPABASE_KEY`. |
+| `No consumer found for USER_7721` | Run `supabase/seed_demo.sql`; set `SUPABASE_KEY` to **service_role** (anon cannot read `consumers`) |
 | Vector search returns `[]` | Run `scripts/backfill_product_embeddings.py` |
 | `consumers` table not found | Run migration SQL in Supabase SQL Editor |
 | Phase 1 guardrails pass but SKU assertion fails | Confirm `ACC-004` is embedded; try widening `--top-k` or refining `search_query` in the case |

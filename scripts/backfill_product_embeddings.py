@@ -1,4 +1,4 @@
-"""
+r"""
 Backfill products.description_embedding in Supabase (384-d MiniLM).
 Run inside .venv-cdp after migration + seed_demo.sql.
 
