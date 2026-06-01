@@ -1,7 +1,7 @@
 # Copy to .env and fill in values ( .env is gitignored )
-SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+SUPABASE_URL=https://bwajqbwguellnoxlwzqr.supabase.co
 # Publishable (client) or legacy anon JWT from Project Settings -> API
-SUPABASE_KEY=your_publishable_or_anon_key
+SUPABASE_KEY=sb_publishable_uNdty7IrgmC_SyWUZlm9kg_WilUwsBp
 
 # Optional
 # EMBEDDING_MODEL_NAME=sentence-transformers/all-MiniLM-L6-v2
