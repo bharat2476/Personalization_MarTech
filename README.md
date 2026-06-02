@@ -28,7 +28,7 @@ These are the deliberate architectural choices made during the build — and wha
 
 | Decision | Why | Trade-off accepted |
 |---|---|---|
-| **Supabase + pgvector** over a dedicated vector DB | Speed of iteration; HNSW at demo scale is sufficient and removes infra overhead | Would migrate to Vertex Matching Engine or Pinecone at 10M+ SKUs |
+| **Supabase + pgvector** over a dedicated vector DB | Speed of iteration; HNSW (Hierarchical Navigable Small Search) at demo scale is sufficient and removes infra overhead | Would migrate to Vertex Matching Engine or Pinecone at 10M+ SKUs |
 | **LangGraph ReAct agent** over a single-shot prompt chain | Tool-calling transparency produces observable telemetry traces; interviewers can inspect reasoning step by step | More moving parts than a direct chain; justified for agentic RAG storytelling |
 | **Propensity threshold hardcoded at 0.75** | Keeps suppression logic explicit and auditable in the demo | In production, this becomes a calibrated ML output, not a fixed constant |
 | **Two ranking variants (A/B) exposed in the UI** | Interviewers and stakeholders can *see* the experiment design in action, not just hear about it | Adds UI complexity; acceptable trade-off for portfolio clarity |
