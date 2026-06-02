@@ -29,9 +29,9 @@ These are the deliberate architectural choices made during the build — and wha
 | Decision | Why | Trade-off accepted |
 |---|---|---|
 | **Supabase + pgvector** over a dedicated vector DB | Speed of iteration; HNSW (Hierarchical Navigable Small Search) at demo scale is sufficient and removes infra overhead | Would migrate to Vertex Matching Engine or Pinecone |
-| **LangGraph ReAct agent** over a single-shot prompt chain | Tool-calling transparency produces observable telemetry traces; interviewers can inspect reasoning step by step | More moving parts than a direct chain; justified for agentic RAG storytelling |
+| **LangGraph ReAct agent** over a single-shot prompt chain | Tool-calling transparency produces observable telemetry traces; Dan inspect reasoning step by step | More moving parts than a direct chain; justified for agentic RAG storytelling |
 | **Propensity threshold hardcoded at 0.75** | Keeps suppression logic explicit and auditable in the demo | In production, this becomes a calibrated ML output, not a fixed constant |
-| **Two ranking variants (A/B) exposed in the UI** | Interviewers and stakeholders can *see* the experiment design in action, not just hear about it | Adds UI complexity; acceptable trade-off for portfolio clarity |
+| **Two ranking variants (A/B) exposed in the UI** | Stakeholders can *see* the experiment design in action, not just hear about it | Adds UI complexity; acceptable trade-off for portfolio clarity |
 | **Streamlit UI** over a full Next.js frontend | Rapid iteration on ML and data logic; keeps the demo stack focused on personalization, not CSS | Not a production UI pattern; a real deployment would use the Next.js app |
 | **Medallion architecture (Bronze → Silver → Gold)** as in-memory simulation | Demonstrates production data pipeline thinking without requiring Flink or Dataflow | Actual stream processing is mocked; production mapping is documented explicitly |
 | **Shoe suppression as a hard guardrail** | Demonstrates that business rules gate ML output — ML doesn't operate without constraints | A more sophisticated system would use probabilistic suppression with decay curves |
